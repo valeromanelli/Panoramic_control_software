@@ -1,0 +1,7 @@
+numpy
+opencv-python
+PyQt6
+pyqtgraph
+nidaqmx
+tifffile
+pyusb
