@@ -1,3 +1,11 @@
+"""Graphical interface for configuring and monitoring four Hamamatsu cameras.
+
+The window provides live visualization, exposure and region-of-interest control,
+internal or external triggering, synchronized recording, and TIFF snapshot export.
+Camera acquisition is delegated to worker threads so that hardware operations do
+not block the Qt event loop.
+"""
+
 import os
 import numpy as np
 import pyqtgraph
@@ -17,17 +25,31 @@ import tifffile as tiff
 
 
 class ConfigureCamera(QMainWindow):
+    """Manage camera configuration, live preview, and synchronized recording.
+
+    The class coordinates four camera-driver instances exposed by the parent
+    platform window. It updates the graphical status indicators, forwards camera
+    settings to the experiment metadata, and starts the acquisition worker threads.
+    """
     stop_live_thread = pyqtSignal()
     new_info_signal = pyqtSignal(str, object, str)
     update_stop_number_signal = pyqtSignal(int)
     def __init__(self, parent=None):
+        """Initialize the camera-control window and connect its Qt signals.
+
+        Parameters
+        ----------
+        parent : QMainWindow, optional
+            Main platform window. It must expose ``cam1`` through ``cam4`` and
+            the status widgets and experiment metadata used by this controller.
+        """
         super().__init__(parent)
 
         self.setWindowTitle("ORCA-Flash4.0 V3 Device Manager")
         #self.setGeometry(2000, -1000, 1600, 980)
         self.setGeometry(100, 100, 1600, 980)
 
-        # VARIABLES
+        # Camera references and acquisition state.
         self.parent = parent
         self.cam1 = self.parent.cam1
         self.cam2 = self.parent.cam2
@@ -43,12 +65,12 @@ class ConfigureCamera(QMainWindow):
         self.check_exp_value_thread = CheckExposureTimeValueThread(parent=self)
         self.live_thread = LiveThread(parent=self)
 
-        # Widget layout
+        # Build the main widget layout.
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.layout = QHBoxLayout(self.central_widget)
 
-        # Image Display
+        # Four-camera image display.
         v_layout = QVBoxLayout()
 
         image_view_group = QGroupBox("Image Display")
@@ -110,7 +132,7 @@ class ConfigureCamera(QMainWindow):
 
         v_layout.addWidget(image_view_group)
 
-        #SETTINGS
+        # Camera settings panel.
         settings_group = QGroupBox("Settings")
         settings_group.setFixedWidth(240)
         settings_layout = QVBoxLayout()
@@ -277,7 +299,7 @@ class ConfigureCamera(QMainWindow):
 
         self.central_widget.setLayout(self.layout)
 
-        # CONNECTIONS
+        # Connect widgets and worker-thread signals.
         self.adjust_button.clicked.connect(self.adjust_histogram)
         self.acquire_thread.acquisition_finished.connect(self.stop_recording)
         self.acquire_thread.black_screen_signal.connect(self.black_screen)
@@ -294,14 +316,16 @@ class ConfigureCamera(QMainWindow):
         self.switch_trigger_mode.toggled.connect(self.trigger_mode)
         self.zoom_to_fit_button.clicked.connect(self.fit_image)
 
-    # METHODS
+    # Camera-control callbacks.
     def adjust_histogram(self):
+        """Automatically adjust the display levels of all four image views."""
         sf.set_levels_histogram(self.image_view1)
         sf.set_levels_histogram(self.image_view2)
         sf.set_levels_histogram(self.image_view3)
         sf.set_levels_histogram(self.image_view4)
 
     def black_screen(self):
+        """Replace all camera previews with a zero-valued 512 x 512 frame."""
         black_frame = np.zeros((512, 512), dtype=np.uint16)
         self.image_view1.setImage(black_frame, autoLevels=False, autoRange=False, autoHistogramRange=False)
         self.image_view2.setImage(black_frame, autoLevels=False, autoRange=False, autoHistogramRange=False)
@@ -309,9 +333,11 @@ class ConfigureCamera(QMainWindow):
         self.image_view4.setImage(black_frame, autoLevels=False, autoRange=False, autoHistogramRange=False)
 
     def check_exposure_time_value(self):
+        """Start asynchronous validation of the exposure value entered by the user."""
         self.check_exp_value_thread.start()
 
     def fit_image(self):
+        """Fit each displayed frame to its view while preserving a small margin."""
         padding_value = 0.046
         self.image_view1.getView().autoRange(padding=padding_value)
         self.image_view2.getView().autoRange(padding=padding_value)
@@ -319,11 +345,25 @@ class ConfigureCamera(QMainWindow):
         self.image_view4.getView().autoRange(padding=padding_value)
 
     def generate_error(self, exp_range):
+        """Display the valid exposure interval after a validation failure.
+
+        Parameters
+        ----------
+        exp_range : sequence of float
+            Two-element sequence containing the minimum and maximum supported
+            exposure times, expressed in seconds.
+        """
         QMessageBox.critical(self, "Error", f"Exposure Time value must be between the following values:<br>"
                                             f"- {round(exp_range[0], 8)}<br>"
                                             f"- {round(exp_range[1], 8)}<br>")
 
     def set_roi_value(self):
+        """Apply the selected square ROI to all four cameras.
+
+        The operation is rejected while live acquisition is active. If the camera
+        driver rejects the requested ROI, the spin box is restored to the last
+        accepted value.
+        """
         if self.live:
             self.roi_value.setValue(self.opt_roi_value)
             QMessageBox.critical(self, "Error", "Cannot change ROI while live is running.")
@@ -346,6 +386,11 @@ class ConfigureCamera(QMainWindow):
         self.check_exposure_time_value()
 
     def start_live(self):
+        """Start continuous preview acquisition for all connected cameras.
+
+        The method validates that all four camera objects are available and starts
+        ``LiveThread`` only when no live acquisition is already running.
+        """
         if not self.cam1 or not self.cam2 or not self.cam3 or not self.cam4:
             QMessageBox.critical(self, "Error", "No all devices found. Please scan devices first.")
             return
@@ -361,6 +406,12 @@ class ConfigureCamera(QMainWindow):
             return
 
     def start_recording(self):
+        """Start the synchronized acquisition defined by the current experiment.
+
+        Any active live preview is stopped first. The method warns when ROI or
+        external-trigger mode is disabled, updates the platform status display,
+        clears the acquisition buffers, and starts ``AcquireThread``.
+        """
         if self.live:
             self.stop_live()
 
@@ -393,6 +444,7 @@ class ConfigureCamera(QMainWindow):
         self.acquire_thread.start()
 
     def stop_live(self):
+        """Request termination of the current live-preview loop."""
         if not self.live:
             QMessageBox.critical(self, "Error", "Live is not running.")
             return
@@ -400,6 +452,13 @@ class ConfigureCamera(QMainWindow):
         self.live = False
 
     def stop_recording(self, n_frames_acquired):
+        """Finalize the GUI state after acquisition has ended.
+
+        Parameters
+        ----------
+        n_frames_acquired : int
+            Number of frames reported by the acquisition worker.
+        """
         self.live = False
 
         device_index = [0, 1, 4, 5, 8, 9, 12, 13]
@@ -417,6 +476,20 @@ class ConfigureCamera(QMainWindow):
         self.frames_acquired_label.setText(str(n_frames_acquired))
 
     def subarray_mode(self, checked, alignment=False):
+        """Enable or disable the camera subarray configuration.
+
+        When enabled, all cameras use a 192 x 192 ROI and a 1 ms exposure. When
+        disabled, the full 2048 x 2048 sensor area and a 10 ms exposure are restored.
+        The resulting configuration is propagated to the parent experiment metadata.
+
+        Parameters
+        ----------
+        checked : bool
+            ``True`` to enable the 192 x 192 subarray, ``False`` for full-frame mode.
+        alignment : bool, optional
+            Indicates that the change was requested by the alignment workflow. In
+            that case, the visible toggle label is not changed when enabling the ROI.
+        """
         if checked:
             if not alignment:
                 self.switch_roi_label.setText("ON")
@@ -485,6 +558,12 @@ class ConfigureCamera(QMainWindow):
                             """)
 
     def take_a_snap(self):
+        """Save the currently displayed frame from each camera as a TIFF image.
+
+        The user selects the destination directory interactively. Frames are rotated
+        to match the saved acquisition orientation and written as unsigned 16-bit
+        images.
+        """
         directory = QFileDialog.getExistingDirectory(None, "Select the Destination Folder")
         if not directory:
             QMessageBox.warning(self, "Warning", "No directory selected.")
@@ -503,6 +582,20 @@ class ConfigureCamera(QMainWindow):
         QMessageBox.information(self, "Success", "Snapshot saved successfully.")
 
     def trigger_mode(self, checked, alignment=False):
+        """Configure all cameras for external or internal triggering.
+
+        External mode enables synchronized readout and frame bundling through the
+        shared helper function. Internal mode restores edge-triggered acquisition and
+        re-enables manual exposure editing.
+
+        Parameters
+        ----------
+        checked : bool
+            ``True`` for external triggering, ``False`` for internal triggering.
+        alignment : bool, optional
+            Indicates that the setting is being applied by the alignment workflow;
+            when true, the visible toggle label is not changed while enabling it.
+        """
         if checked:
             if not alignment:
                 self.switch_trigger_label.setText("ON")
@@ -553,12 +646,30 @@ class ConfigureCamera(QMainWindow):
                                         """)
 
     def update_image_views(self, frame1, frame2, frame3, frame4):
+        """Display one new frame for each camera without automatic rescaling.
+
+        Parameters
+        ----------
+        frame1, frame2, frame3, frame4 : numpy.ndarray
+            Frames acquired from cameras 1 through 4, respectively.
+        """
         self.image_view1.setImage(frame1, autoLevels=False, autoRange=False, autoHistogramRange=False)
         self.image_view2.setImage(frame2, autoLevels=False, autoRange=False, autoHistogramRange=False)
         self.image_view3.setImage(frame3, autoLevels=False, autoRange=False, autoHistogramRange=False)
         self.image_view4.setImage(frame4, autoLevels=False, autoRange=False, autoHistogramRange=False)
 
     def update_stop_condition_value(self, value):
+        """Update the recording stop condition received from the sequence manager.
+
+        The stop value is converted to the nearest lower even-compatible frame count
+        expected by the bundled camera acquisition. Non-positive values disable the
+        recording button.
+
+        Parameters
+        ----------
+        value : int
+            Candidate number of frames supplied by the parent platform.
+        """
         if value <= 0:
             self.start_record_button.setEnabled(False)
             return
@@ -570,6 +681,13 @@ class ConfigureCamera(QMainWindow):
         self.start_record_button.setEnabled(True)
 
     def closeEvent(self, event):
+        """Handle a window-close request and stop live acquisition when confirmed.
+
+        Parameters
+        ----------
+        event : QCloseEvent
+            Qt close event to accept or ignore according to the user's choice.
+        """
         reply = QMessageBox.question(
             self,
             "Confirm Exit",
@@ -586,7 +704,3 @@ class ConfigureCamera(QMainWindow):
 
         else:
             event.ignore()
-
-
-
-

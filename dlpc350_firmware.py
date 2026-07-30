@@ -1,3 +1,5 @@
+"""DLPC350 firmware parsing, splash-image handling, and image rebuilding."""
+
 import ctypes
 import struct
 from dataclasses import dataclass
@@ -22,6 +24,7 @@ FLASH_BASE_ADDRESS = 0xF9000000
 
 @dataclass()
 class IniParamInfo:
+    """Description of one editable firmware configuration token."""
     token: str
     default_param: list[int]
     gui_defined_param: list[int]
@@ -41,6 +44,7 @@ g_iniParam_Info = [
 
 BMP_FILE_HEADER_SIZE = 14
 class BITMAPINFOHEADER(ctypes.Structure):
+    """ctypes representation of the Windows BITMAPINFOHEADER structure."""
     _fields_ = [
         ("biSize", ctypes.c_ulong),          # DWORD
         ("biWidth", ctypes.c_long),          # LONG
@@ -57,6 +61,7 @@ class BITMAPINFOHEADER(ctypes.Structure):
 
 
 class SPLASH_BLOB_INFO:
+    """Offset and size of one splash-image blob."""
     def __init__(self):
         self.blob_offset = 0
         self.blob_size = 0
@@ -66,6 +71,7 @@ class SPLASH_BLOB_INFO:
 
 
 class SPLASH_HEADER:
+    """Serializable header for one DLPC350 splash image."""
     def __init__(self):
         self.signature = 0
         self.image_width = 0
@@ -105,6 +111,7 @@ class SPLASH_HEADER:
 
 
 class SPLASH_SUPER_BINARY_INFO:
+    """Header for a collection of splash-image blobs."""
     def __init__(self):
         self.sig1 = 0
         self.sig2 = 0
@@ -115,12 +122,14 @@ class SPLASH_SUPER_BINARY_INFO:
 
 
 class FLASH_BLOCK:
+    """Address and byte count of one flash-memory block."""
     def __init__(self):
         self.address = 0
         self.byte_count = 0
 
 
 class FLASH_TABLE:
+    """Parsed DLPC350 flash table."""
     def __init__(self):
         self.signature = 0
         self.boot_address = 0
@@ -174,6 +183,7 @@ class FLASH_TABLE:
 
 
 class Dlpc350_firmware:
+    """Parse, modify, and rebuild a DLPC350 firmware image."""
     def __init__(self):
         # Errors
         self.ERROR_NO_MEM_FOR_MALLOC = -1

@@ -1,16 +1,20 @@
 """
-    UUTrack.Model.Cameras._skeleton.py
-    ==================================
-    Camera class with the skeleton functions. Important to keep track of the methods that are
-    exposed to the View. The class cameraBase should be subclassed when developing new Models. This ensures that all the methods are automatically inherited and there is no breaks downstream.
+Base interface for camera-control implementations.
 
-    .. note:: **IMPORTANT** Whatever new function is implemented in a specific model, it should be first declared in the cameraBase class. In this way the other models will have access to the method and the program will keep running (perhaps with non intended behavior though).
+The `CameraBase` class defines the common operations expected from camera
+drivers used by the acquisition platform, including initialization, exposure
+control, acquisition, region-of-interest configuration, and device shutdown.
 
-    .. sectionauthor:: Aquiles Carattino <aquiles@aquicarattino.com>
+Concrete camera drivers should subclass `CameraBase` and override the methods
+supported by the corresponding hardware.
+
+This module contains code adapted from the UUTrack project.
+See `THIRD_PARTY_NOTICES.md` for attribution and licensing information.
 """
 
 
 class cameraBase():
+    """Compatibility interface implemented by concrete camera backends."""
     MODE_CONTINUOUS = 1
     MODE_SINGLE_SHOT = 0
 

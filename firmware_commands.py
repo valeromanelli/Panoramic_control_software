@@ -1,3 +1,5 @@
+"""Firmware image extraction and splash-image compression helpers."""
+
 import numpy as np
 from PyQt6.QtCore import QFile, QIODevice
 import dlpc350_firmware as fw
@@ -18,32 +20,29 @@ m_splash_image_removed = 0
 
 
 def my_file_write(param, data, size):
-    """
-    Simulazione della funzione My_FileWrite in Python.
+    """Write bytes, or seek when ``data`` is ``None``.
 
-    :param param: Oggetto file (ad esempio un BytesIO o un file aperto in modalità binaria)
-    :param data: Dati da scrivere come bytearray o None se si desidera solo eseguire seek
-    :param size: Dimensione dei dati in byte o posizione di seek se data è None
-    :return: 0 se l'operazione ha successo, -1 in caso di errore
+    Returns 0 on success and -1 when the callback cannot complete the request.
     """
     try:
-        # Se `data` è None, esegui solo seek
+        # A null data pointer represents a seek request in the original API.
         if data is None:
             param.seek(size)
         else:
-            # Scrivi i dati se `size` è maggiore di 0
+            # Write exactly the requested number of bytes.
             if size > 0:
                 written_bytes = param.write(data[:size])
                 if written_bytes < size:
-                    # Se non sono stati scritti tutti i byte richiesti, ritorna errore
+                    # Treat partial writes as an error.
                     return -1
         return 0
     except Exception as e:
-        print(f"Errore durante la scrittura o il seek: {e}")
+        print(f"Firmware write/seek error: {e}")
         return -1
 
 
 def my_image_get(param, X, Y, pix, count, buffer):
+    """Copy one horizontal pixel span from an RGB image buffer."""
     if param is None:
         param = None
 
@@ -57,6 +56,7 @@ def my_image_get(param, X, Y, pix, count, buffer):
 
 
 def obtain_images_loaded(file):
+    """Parse firmware and export its splash images as temporary BMP files."""
     ret = 0
     with open(file, 'rb') as f:
         for i in range(MAX_SPLASH_IMAGES):
@@ -114,6 +114,7 @@ def obtain_images_loaded(file):
 
 
 def splash_perform_line_compression(source_addr, image_width, image_height, num_lines):
+    """Check whether repeated image lines support line compression."""
     bytes_per_pixel = 3
     line_length = image_width * bytes_per_pixel
 
@@ -139,6 +140,7 @@ def splash_perform_line_compression(source_addr, image_width, image_height, num_
 
 
 def splash_perform_rle_compression(source_addr, destination_addr, image_width, image_height):
+    """Compress a 24-bit splash image using the DLPC350 RLE format."""
     first_pixel = True
     repeat = 1
     pixel = 0
@@ -248,6 +250,7 @@ def splash_perform_rle_compression(source_addr, destination_addr, image_width, i
 
 
 def splash_perform_rle_uncompression(source_addr, destination_addr, size):
+    """Decompress a DLPC350 RLE splash image."""
     source_addr = bytearray(source_addr)
     pixel_size = 3
     S = 0

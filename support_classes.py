@@ -1,3 +1,6 @@
+"""Reusable Qt dialogs, widgets, and hardware metadata containers."""
+
+import runtime_config as cfg
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QPainter, QBrush, QColor, QIcon, QFont
@@ -10,6 +13,7 @@ from nidaqmx.constants import LineGrouping, AcquisitionType
 
 
 class FlashDevice:
+    """Container for flash-memory identification and sector metadata."""
     def __init__(self):
         self.mfg = ''
         self.mfg_id = 0
@@ -24,6 +28,7 @@ class FlashDevice:
 
 
 class NotesDialog(QDialog):
+    """Dialog used to collect optional experiment notes."""
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Notes for the Experiment")
@@ -54,6 +59,7 @@ class NotesDialog(QDialog):
 
 
 class FindThresholdDialog(QDialog):
+    """Dialog for interactively estimating the optical threshold."""
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Threshold Potential Detection")
@@ -243,7 +249,7 @@ class FindThresholdDialog(QDialog):
                 self.array_to_send, self.scan_rate = self.sequenciator.define_array_to_send(blue_duty_cycle)
 
         self.master_task = nidaqmx.Task()
-        self.master_task.do_channels.add_do_chan("Dev2/port0/line0:31", line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+        self.master_task.do_channels.add_do_chan(cfg.NI_PORT0_LINES, line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
         self.master_task.timing.cfg_samp_clk_timing(rate=self.scan_rate, sample_mode=AcquisitionType.FINITE, samps_per_chan=self.array_to_send.size)
         self.master_task.write(self.array_to_send)
 
@@ -268,6 +274,7 @@ class FindThresholdDialog(QDialog):
 
 
 class HistoryDialog(QDialog):
+    """Dialog that displays the threshold-testing history."""
     def __init__(self, storico_dict):
         super().__init__()
         self.setWindowTitle("Tested Values History")
@@ -287,6 +294,7 @@ class HistoryDialog(QDialog):
 
 
 class QToggleSwitch(QWidget):
+    """Custom painted toggle switch used by the Qt interface."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(40, 20)

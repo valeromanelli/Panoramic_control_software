@@ -1,3 +1,9 @@
+"""QThread workers used by the camera, DMD, and experiment-control GUIs.
+
+The workers coordinate blocking hardware operations without freezing the Qt event
+loop. GUI updates should be emitted through signals whenever a worker is extended."""
+
+import runtime_config as cfg
 import os.path
 import time
 import nidaqmx
@@ -22,6 +28,7 @@ import cv2
 
 # CONTROL PLATFORM GUI
 class CheckCameraConnectionThread(QThread):
+    """Discover and initialize the configured cameras."""
     camera_found = pyqtSignal(int, object)
     process_finished = pyqtSignal()
     def __init__(self):
@@ -34,28 +41,28 @@ class CheckCameraConnectionThread(QThread):
             except cbc.DCAMException:
                 continue
 
-            if cam_par.getSerialNumber() == b'S/N: 306342':
+            if cam_par.getSerialNumber() == cfg.CAMERA_SERIALS[1]:
                 cam1 = cam_par
                 cam1.initializeCamera()
                 cam1.setAcquisitionMode(sf.MODE_CONTINUOUS)
                 cam1.setExposure(0.01)
                 self.camera_found.emit(1, cam1)
 
-            elif cam_par.getSerialNumber() == b'S/N: 306343':
+            elif cam_par.getSerialNumber() == cfg.CAMERA_SERIALS[2]:
                 cam2 = cam_par
                 cam2.initializeCamera()
                 cam2.setAcquisitionMode(sf.MODE_CONTINUOUS)
                 cam2.setExposure(0.01)
                 self.camera_found.emit(2, cam2)
 
-            elif cam_par.getSerialNumber() == b'S/N: 306340':
+            elif cam_par.getSerialNumber() == cfg.CAMERA_SERIALS[3]:
                 cam3 = cam_par
                 cam3.initializeCamera()
                 cam3.setAcquisitionMode(sf.MODE_CONTINUOUS)
                 cam3.setExposure(0.01)
                 self.camera_found.emit(3, cam3)
 
-            elif cam_par.getSerialNumber() == b'S/N: 301529':
+            elif cam_par.getSerialNumber() == cfg.CAMERA_SERIALS[4]:
                 cam4 = cam_par
                 cam4.initializeCamera()
                 cam4.setAcquisitionMode(sf.MODE_CONTINUOUS)
@@ -63,11 +70,10 @@ class CheckCameraConnectionThread(QThread):
                 self.camera_found.emit(4, cam4)
 
         self.process_finished.emit()
-        self.quit()
-        self.wait()
 
 
 class CheckDMDConnectionThread(QThread):
+    """Check the availability of the four DMD channels."""
     process_finished = pyqtSignal(bool, int)
     start_control_dmd_gui = pyqtSignal()
     def __init__(self):
@@ -106,11 +112,9 @@ class CheckDMDConnectionThread(QThread):
 
         self.start_control_dmd_gui.emit()
 
-        self.quit()
-        self.wait()
-
 
 class EnableDMDThread(QThread):
+    """Generate the waveform used for manual DMD illumination."""
     array_defined_signal = pyqtSignal(object)
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -132,11 +136,9 @@ class EnableDMDThread(QThread):
 
         self.array_defined_signal.emit(array_to_send)
 
-        self.quit()
-        self.wait()
-
 
 class FindThresholdThread(QThread):
+    """Reserved worker for threshold-detection operations."""
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -147,6 +149,7 @@ class FindThresholdThread(QThread):
 
 
 class GenerateSequenceThread(QThread):
+    """Generate and write the complete experiment waveform to NI-DAQ."""
     update_generation_signal = pyqtSignal(int)
     update_sending_signal = pyqtSignal(bool, int)
     def __init__(self, parent=None):
@@ -280,7 +283,7 @@ class GenerateSequenceThread(QThread):
         self.update_generation_signal.emit(self.array_to_send.size)
 
         self.parent.master_task = nidaqmx.Task()
-        self.parent.master_task.do_channels.add_do_chan("Dev2/port0/line0:31", line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+        self.parent.master_task.do_channels.add_do_chan(cfg.NI_PORT0_LINES, line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
         self.parent.master_task.timing.cfg_samp_clk_timing(rate=self.parent.scan_rate, sample_mode=AcquisitionType.FINITE,samps_per_chan=self.array_to_send.size)
         number_of_samples_written = self.parent.master_task.write(self.array_to_send)
 
@@ -295,6 +298,7 @@ class GenerateSequenceThread(QThread):
 
 
 class PlaySequenceThread(QThread):
+    """Start a previously configured finite NI-DAQ task."""
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -306,11 +310,9 @@ class PlaySequenceThread(QThread):
         self.parent.master_task.wait_until_done(timeout=self.parent.scan_time * self.parent.datasize + 1)
         self.parent.master_task.stop()
 
-        self.quit()
-        self.wait()
-
 
 class StartAlignmentThread(QThread):
+    """Start camera acquisition for optical alignment."""
     process_finished = pyqtSignal(bool)
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -325,11 +327,9 @@ class StartAlignmentThread(QThread):
 
         self.process_finished.emit(True)
 
-        self.quit()
-        self.wait()
-
 
 class SendEnableDMDThread(QThread):
+    """Write the manual DMD-enable waveform to NI-DAQ."""
     ready_to_start_signal = pyqtSignal()
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -338,17 +338,16 @@ class SendEnableDMDThread(QThread):
 
     def run(self):
         self.parent.alignment_task = nidaqmx.Task()
-        self.parent.alignment_task.do_channels.add_do_chan("Dev2/port0/line0:31", line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+        self.parent.alignment_task.do_channels.add_do_chan(cfg.NI_PORT0_LINES, line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
         self.parent.alignment_task.timing.cfg_samp_clk_timing(rate=1000000, sample_mode=AcquisitionType.FINITE,
                                                samps_per_chan=self.parent.array_defined.size)
         self.parent.alignment_task.write(self.parent.array_defined)
 
         self.ready_to_start_signal.emit()
-        self.quit()
-        self.wait()
 
 
 class StartTaskThread(QThread):
+    """Start manual DMD illumination and stop it after the configured interval."""
     change_color_signal = pyqtSignal(bool)
     start_timer_signal = pyqtSignal()
     def __init__(self, parent=None):
@@ -389,11 +388,9 @@ class StartTaskThread(QThread):
 
         self.change_color_signal.emit(False)
 
-        self.quit()
-        self.wait()
-
 
 class StopAlignmentThread(QThread):
+    """Stop live camera acquisition after alignment."""
     process_finished = pyqtSignal()
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -405,12 +402,10 @@ class StopAlignmentThread(QThread):
         time.sleep(0.3)
         self.parent.control_camera_gui.subarray_mode(False)
 
-        self.quit()
-        self.wait()
-
 
 # DMD CONTROL GUI
 class AcquireSingleThread(QThread):
+    """Acquire one synchronized frame from each camera."""
     finished_signal = pyqtSignal(object, object, object, object)
     def __init__(self, cam1, cam2, cam3, cam4, parent=None):
         super().__init__(parent)
@@ -445,11 +440,9 @@ class AcquireSingleThread(QThread):
 
         self.finished_signal.emit(frame1, frame2, frame3, frame4)
 
-        self.quit()
-        self.wait()
-
 
 class ShowUploadedImagesThread(QThread):
+    """Extract splash images from a selected firmware file."""
     finished_signal = pyqtSignal(int)
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -461,11 +454,9 @@ class ShowUploadedImagesThread(QThread):
 
         self.finished_signal.emit(verify)
 
-        self.quit()
-        self.wait()
-
 
 class ModifyFirmwareThread(QThread):
+    """Rebuild firmware after splash-image modifications."""
     finished_signal = pyqtSignal(object)
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -560,6 +551,7 @@ class ModifyFirmwareThread(QThread):
 
 
 class AddAndValidateSequenceThreadDMD1(QThread):
+    """Build and validate the DMD 1 pattern lookup table."""
     finished_signal = pyqtSignal(bool)
     progress_signal = pyqtSignal(int)
     def __init__(self, parent=None):
@@ -668,11 +660,9 @@ class AddAndValidateSequenceThreadDMD1(QThread):
             self.parent.state_dmd1_button.setIcon(self.red_icon)
             self.finished_signal.emit(False)
 
-        self.quit()
-        self.wait()
-
 
 class AddAndValidateSequenceThreadDMD2(QThread):
+    """Build and validate the DMD 2 pattern lookup table."""
     finished_signal = pyqtSignal(bool)
     progress_signal = pyqtSignal(int)
     def __init__(self, parent=None):
@@ -782,11 +772,9 @@ class AddAndValidateSequenceThreadDMD2(QThread):
             self.parent.state_dmd2_button.setIcon(self.red_icon)
             self.finished_signal.emit(False)
 
-        self.quit()
-        self.wait()
-
 
 class AddAndValidateSequenceThreadDMD3(QThread):
+    """Build and validate the DMD 3 pattern lookup table."""
     finished_signal = pyqtSignal(bool)
     progress_signal = pyqtSignal(int)
     def __init__(self, parent=None):
@@ -896,11 +884,9 @@ class AddAndValidateSequenceThreadDMD3(QThread):
             self.parent.state_dmd3_button.setIcon(self.red_icon)
             self.finished_signal.emit(False)
 
-        self.quit()
-        self.wait()
-
 
 class AddAndValidateSequenceThreadDMD4(QThread):
+    """Build and validate the DMD 4 pattern lookup table."""
     finished_signal = pyqtSignal(bool)
     progress_signal = pyqtSignal(int)
     def __init__(self, parent=None):
@@ -1011,11 +997,9 @@ class AddAndValidateSequenceThreadDMD4(QThread):
             self.parent.state_dmd4_button.setIcon(self.red_icon)
             self.finished_signal.emit(False)
 
-        self.quit()
-        self.wait()
-
 
 class UploadPatternsThread(QThread):
+    """Upload a firmware image to one selected DMD."""
     finished_signal = pyqtSignal(bool, int)
     progress_signal = pyqtSignal(int)
     def __init__(self, upload_file, parent=None):
@@ -1230,6 +1214,7 @@ class UploadPatternsThread(QThread):
 
 # CAMERA CONTROL GUI
 class AcquireThread(QThread):
+    """Acquire synchronized image sequences from all cameras."""
     acquisition_finished = pyqtSignal(int)
     black_screen_signal = pyqtSignal()
     send_frames = pyqtSignal(list, list, list, list)
@@ -1305,14 +1290,13 @@ class AcquireThread(QThread):
         self.acquisition_finished.emit(self.n_frames_acquired1)
 
         self.send_frames.emit(self.parent.cam1_acquisition, self.parent.cam2_acquisition, self.parent.cam3_acquisition, self.parent.cam4_acquisition)
-        self.quit()
-        self.wait()
 
     def request_stop(self):
         self.stop_requested = True
 
 
 class AppendThread(QThread):
+    """Append acquired frames and finalize an acquisition."""
     send_frames = pyqtSignal(object, object, object, object)
     #show_frames = pyqtSignal(object, object, object, object)
     def __init__(self, parent=None):
@@ -1381,11 +1365,9 @@ class AppendThread(QThread):
         if self.main.cam1_acquisition and self.main.cam2_acquisition and self.main.cam3_acquisition and self.main.cam4_acquisition:
             self.send_frames.emit(self.main.cam1_acquisition, self.main.cam2_acquisition, self.main.cam3_acquisition, self.main.cam4_acquisition)
 
-        self.quit()
-        self.wait()
-
 
 class CheckExposureTimeValueThread(QThread):
+    """Validate and apply a requested camera exposure time."""
     error_signal = pyqtSignal(list)
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1403,9 +1385,6 @@ class CheckExposureTimeValueThread(QThread):
 
             self.error_signal.emit(exp_range)
 
-            self.quit()
-            self.wait()
-
         else:
             self.parent.cam1.setExposure(exp_value)
             self.parent.cam2.setExposure(exp_value)
@@ -1415,11 +1394,9 @@ class CheckExposureTimeValueThread(QThread):
 
         self.parent.start_button.setEnabled(True)
 
-        self.quit()
-        self.wait()
-
 
 class LiveThread(QThread):
+    """Continuously acquire frames for the live camera preview."""
     black_screen_signal = pyqtSignal()
     update_image_view_signal = pyqtSignal(object, object, object, object)
     def __init__(self, parent=None):
@@ -1471,9 +1448,6 @@ class LiveThread(QThread):
 
         self.black_screen_signal.emit()
 
-        self.quit()
-        self.wait()
-
 
 """class UpdateImageViewThread(QThread):
     def __init__(self, parent=None):
@@ -1499,6 +1473,4 @@ class LiveThread(QThread):
 
             self.counter = 0
 
-    def stop_showing(self):
-        self.quit()
-        self.wait()"""
+    def stop_showing(self):"""

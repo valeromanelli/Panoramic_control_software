@@ -1,3 +1,5 @@
+"""Minimal BMP serialization helpers used by the DLPC350 firmware tools."""
+
 ERR_INVALID_PARAM = -1
 BMP_DIB_HEADER_SIZE = 40
 BMP_DIB_HEADER_SIZE1 = 108
@@ -5,6 +7,7 @@ BMP_FILE_HEADER_SIZE = 14
 
 
 class bmp_image_t:
+    """Metadata required to serialize one BMP image."""
     def __init__(self):
         self.width = 0
         self.heigth = 0
@@ -13,26 +16,32 @@ class bmp_image_t:
 
 
 def get_line_bytes(image):
+    """Return the padded number of bytes in one BMP scan line."""
     return align_bytes_next(image.width * image.bit_depth, 32) // 8
 
 
 def align_bytes_next(value, align):
+    """Round a value up to the requested alignment."""
     return (value + align - 1) & ~ (align - 1)
 
 
 def make_word_16(b1, b0):
+    """Combine two one-character values into a 16-bit integer."""
     return (ord(b1) << 8) | ord(b0)
 
 
 def make_word_32(b3, b2, b1, b0):
+    """Combine four bytes into a 32-bit integer."""
     return (b3 << 24) | (b2 << 16) | (b1 << 8) | b0
 
 
 def gen_bit_mask(s, n):
+    """Return a mask containing the requested number of low-order bits."""
     return (1 << n) - 1
 
 
 def bmp_init_image(image, width, height, bit_depth):
+    """Initialize BMP metadata and normalize the requested bit depth."""
     if image is None:
         return -1
 
@@ -59,12 +68,14 @@ def bmp_init_image(image, width, height, bit_depth):
 
 
 def bmp_put_data(put_data, data_param, value, size):
+    """Serialize an integer and pass it to the supplied writer callback."""
     data = value.to_bytes(4, byteorder='little')
 
     return put_data(data_param, data, size)
 
 
 def bmp_store_image(image, put_data, data_param, get_pixels, image_buffer, pixel_param=None):
+    """Serialize image metadata and pixels as a BMP stream."""
     BMP_SIGNATURE = make_word_16('M', 'B')
     header_size = BMP_DIB_HEADER_SIZE1 if image.bit_depth == 16 else BMP_DIB_HEADER_SIZE
     pix_offset = image.num_colors * 4 + BMP_FILE_HEADER_SIZE + header_size

@@ -1,3 +1,6 @@
+"""Main PyQt6 application for configuring and running platform experiments."""
+
+import runtime_config as cfg
 import ctypes
 import math
 import os
@@ -24,6 +27,7 @@ from giotto import Giotto
 
 
 class DefineSequenceAndControlPlatformGUI(QMainWindow):
+    """Main window that coordinates experiment phases and connected devices."""
     dmd_connected_signal = pyqtSignal()
     stop_condition_signal = pyqtSignal(int)
     enable_preview_signal = pyqtSignal(object, object, object, object)
@@ -57,7 +61,7 @@ class DefineSequenceAndControlPlatformGUI(QMainWindow):
         self.control_dmd_gui = None
         self.master_task = None
         self.alignment_task = None
-        self.parent_directory = "C:/Users/Panoramic/Desktop/Camera Repository"
+        self.parent_directory = str(cfg.CAMERA_DATA_DIRECTORY)
         self.today_date = datetime.now().strftime("%Y-%m-%d")
         self.enable_timer = QTimer(self)
         self.elapsed_seconds = 60
@@ -235,7 +239,7 @@ class DefineSequenceAndControlPlatformGUI(QMainWindow):
         cycle_layout = QVBoxLayout()
         inner = QHBoxLayout()
 
-        # (opzionale) stringi un po' i box interni per farci stare tutto
+        # Keep the internal phase boxes compact enough to fit the group.
         self.stim_group.setFixedWidth(190)
         self.post_stim_group.setFixedWidth(190)
 
@@ -1356,7 +1360,7 @@ class DefineSequenceAndControlPlatformGUI(QMainWindow):
                     self.blue_led_dmd2.isChecked(), self.red_led_dmd3.isChecked(), self.blue_led_dmd3.isChecked(),
                     self.red_led_dmd4.isChecked(), self.blue_led_dmd4.isChecked()]):
                 with nidaqmx.Task() as task:
-                    task.do_channels.add_do_chan("Dev2/port0", line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+                    task.do_channels.add_do_chan(cfg.NI_PORT0, line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
                     task.start()
                     task.write(0)
                     task.stop()
@@ -1377,7 +1381,7 @@ class DefineSequenceAndControlPlatformGUI(QMainWindow):
                     self.blue_led_dmd2.isChecked(), self.red_led_dmd3.isChecked(), self.blue_led_dmd3.isChecked(),
                     self.red_led_dmd4.isChecked(), self.blue_led_dmd4.isChecked()]):
                 with nidaqmx.Task() as task:
-                    task.do_channels.add_do_chan("Dev2/port0", line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+                    task.do_channels.add_do_chan(cfg.NI_PORT0, line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
                     task.start()
                     task.write(0)
                     task.stop()
@@ -1387,7 +1391,7 @@ class DefineSequenceAndControlPlatformGUI(QMainWindow):
                 self.timer_label.setText("00:00")
 
                 with nidaqmx.Task() as task:
-                    task.do_channels.add_do_chan("Dev2/port0", line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+                    task.do_channels.add_do_chan(cfg.NI_PORT0, line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
                     task.start()
                     task.write(0)
                     task.stop()

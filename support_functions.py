@@ -1,3 +1,6 @@
+"""Shared camera, DMD, NI-DAQ, logging, and image-display utilities."""
+
+import runtime_config as cfg
 import time
 import nidaqmx
 from PyQt6.QtWidgets import QMessageBox
@@ -48,6 +51,7 @@ DMD4_CHANNEL = 0x00
 
 
 def able_trig_mode_camera(cam):
+    """Configure a camera for synchronized external triggering."""
     cam.setTrigMode(NORMAL_TRIGGER)
     cam.setTrigSource(EXTERNAL_TRIGGER)
     cam.setTrigActive(SYNCREADOUT_TRIGGER)
@@ -58,17 +62,18 @@ def able_trig_mode_camera(cam):
 
 
 def check_pcie_connectivity():
+    """Return whether the expected NI PCIe-6612 board is available."""
     local_system = nidaqmx.system.System.local()
 
     for device in local_system.devices:
         if device.product_type == 'PCIe-6612':
             with nidaqmx.Task() as task:
-                task.do_channels.add_do_chan("Dev2/port0", line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+                task.do_channels.add_do_chan(cfg.NI_PORT0, line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
                 task.write(0)
                 task.stop()
 
             with nidaqmx.Task() as task:
-                task.do_channels.add_do_chan("Dev2/port1", line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+                task.do_channels.add_do_chan(cfg.NI_PORT1, line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
                 task.write(0)
                 task.stop()
 
@@ -78,6 +83,7 @@ def check_pcie_connectivity():
 
 
 def clear_layout(layout):
+    """Delete all widgets currently owned by a Qt layout."""
     while layout.count():
         item = layout.takeAt(0)
         widget = item.widget()
@@ -87,6 +93,7 @@ def clear_layout(layout):
 
 
 def disable_trig_mode_camera(cam):
+    """Restore internal camera triggering and disable frame bundling."""
     cam.setTrigMode(NORMAL_TRIGGER)
     cam.setTrigSource(INTERNAL_TRIGGER)
     cam.setTrigActive(EDGE_TRIGGER)
@@ -96,6 +103,7 @@ def disable_trig_mode_camera(cam):
 
 
 def elaborate_frame(array):
+    """Split frame-bundle data into rotated 192 x 192 images."""
     dims = [192, 192]
     new_array = []
 
@@ -127,6 +135,7 @@ def elaborate_frame(array):
     return new_array
 
 def elaborate_frame2(array, frame):
+    """Append one frame bundle to an existing image list."""
     dims = [192, 192]
 
     i = 0
@@ -156,6 +165,7 @@ def elaborate_frame2(array, frame):
 
 
 def generate_experiment_log(filename, info):
+    """Write a human-readable experiment metadata log."""
     with open(filename, 'w') as file:
         # Header with date and time
         file.write(f"{info["date"]} - {info["saving_time"]}\n")
@@ -255,12 +265,15 @@ def generate_experiment_log(filename, info):
 
 
 def run_server_32bit():
-    file_path = "C:/Users/Panoramic/PycharmProjects/32bitPython/server_32bit.py"
-    python_32_bit_path = "C:/Users/Panoramic/AppData/Local/Programs/Python/Python313-32/python.exe"
-    subprocess.Popen([python_32_bit_path, file_path], creationflags=subprocess.CREATE_NO_WINDOW)
+    """Start the external 32-bit helper process used by the DAC interface."""
+    subprocess.Popen(
+        [str(cfg.PYTHON_32BIT_EXECUTABLE), str(cfg.SERVER_32BIT_SCRIPT)],
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
 
 
 def select_channel(channel):
+    """Select one DMD channel through the NI digital output port."""
     if channel == 0 or channel == 4:
         data = DMD4_CHANNEL
     elif channel == 1:
@@ -271,7 +284,7 @@ def select_channel(channel):
         data = DMD3_CHANNEL
 
     with nidaqmx.Task() as task:
-        task.do_channels.add_do_chan("Dev2/port1", line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
+        task.do_channels.add_do_chan(cfg.NI_PORT1, line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
         task.start()
         task.write(data)
         task.stop()
@@ -280,8 +293,9 @@ def select_channel(channel):
 
 
 def send_command_to_board(commands):
-    host = '127.0.0.1'
-    port = 65432
+    """Send serialized DAC commands to the local helper server."""
+    host = cfg.DAC_SERVER_HOST
+    port = cfg.DAC_SERVER_PORT
 
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     for _ in range(10):
@@ -291,7 +305,7 @@ def send_command_to_board(commands):
         except ConnectionRefusedError:
             time.sleep(1)
     else:
-        raise Exception("Il server non è disponibile.")
+        raise ConnectionError("The local DAC server is not available.")
 
     serialized_commands = json.dumps(commands).encode('utf-8')
     client_socket.send(serialized_commands)
@@ -304,6 +318,7 @@ def send_command_to_board(commands):
 
 
 def set_levels_histogram(image_view):
+    """Set image-display levels to the current image minimum and maximum."""
     min_lev = np.min(image_view.image)
     max_lev = np.max(image_view.image)
 
@@ -311,6 +326,7 @@ def set_levels_histogram(image_view):
 
 
 def show_frame_x_thread(frame, image_view):
+    """Resize, rotate, and display one camera frame."""
     new_size = (512, 512)
 
     frame = cv2.resize(frame, new_size, interpolation=cv2.INTER_LINEAR)
@@ -319,6 +335,7 @@ def show_frame_x_thread(frame, image_view):
     image_view.setImage(frame, autoLevels=False, autoRange=False, autoHistogramRange=False)
 
 def sync_checkboxes(clicked_checkbox, all_checkboxes):
+    """Keep only the clicked checkbox selected within a group."""
     if clicked_checkbox.isChecked():
         for cb in all_checkboxes:
             if cb != clicked_checkbox:
@@ -326,6 +343,7 @@ def sync_checkboxes(clicked_checkbox, all_checkboxes):
 
 
 def update_image(frame):
+    """Resize and rotate one frame for display."""
     new_size = (512, 512)
 
     frame = cv2.resize(frame, new_size, interpolation=cv2.INTER_LINEAR)

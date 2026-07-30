@@ -26,6 +26,7 @@ from skeleton import cameraBase
 
 
 class camera(cameraBase):
+    """High-level Hamamatsu camera adapter used by the application."""
     MODE_CONTINUOUS = 1
     MODE_SINGLE_SHOT = 0
     MODE_PANORAMIC = 2

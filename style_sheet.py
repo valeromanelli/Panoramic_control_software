@@ -1,4 +1,7 @@
+"""Centralized PyQt6 stylesheet helpers used by the graphical interface."""
+
 def style(widget):
+    """Apply the application-wide stylesheet to a Qt widget."""
     widget.setStyleSheet("""
                     QWidget {background-color: white;}          
                     QDoubleSpinBox {
@@ -28,23 +31,23 @@ def style(widget):
                     }
                     
                     QListWidget {
-                        background-color: #F5F5F5; /* Colore di sfondo */
-                        border: 1px solid #C0C0C0; /* Bordi */
-                        border-radius: 5px; /* Angoli arrotondati */
-                        font-size: 12px; /* Dimensione font */
-                        padding: 5px; /* Padding interno */
+                        background-color: #F5F5F5; /* Background color */
+                        border: 1px solid #C0C0C0; /* Border */
+                        border-radius: 5px; /* Rounded corners */
+                        font-size: 12px; /* Font size */
+                        padding: 5px; /* Internal padding */
                     }
                     QListWidget::item {
-                        padding: 9px; /* Padding per gli elementi */
-                        border-bottom: 1px solid #E0E0E0; /* Bordi tra gli elementi */
-                        color: #333; /* Colore del testo */
+                        padding: 9px; /* Item padding */
+                        border-bottom: 1px solid #E0E0E0; /* Border tra gli elementi */
+                        color: #333; /* Text color */
                     }
                     QListWidget::item:selected {
-                        background-color: #007BFF; /* Colore di sfondo quando selezionato */
-                        color: white; /* Colore del testo quando selezionato */
+                        background-color: #007BFF; /* Background color quando selezionato */
+                        color: white; /* Text color quando selezionato */
                     }
                     QListWidget::item:hover {
-                        background-color: #D3E6FF; /* Colore di sfondo al passaggio del mouse */
+                        background-color: #D3E6FF; /* Background color al passaggio del mouse */
                     }
     
                     QPushButton {
@@ -71,18 +74,18 @@ def style(widget):
                     }               
                     QScrollBar:horizontal {
                         border: none;
-                        background: #E0E0E0;  /* Sfondo leggero per la scrollbar */
-                        width: 12px;  /* Larghezza della scrollbar verticale */
+                        background: #E0E0E0;  /* Light scrollbar background */
+                        width: 12px;  /* Vertical scrollbar width */
                         margin: 2px 0;
                         border-radius: 6px;
                     }                
                     QScrollBar::handle:vertical {
-                        background: #888;  /* Colore principale della maniglia */
-                        min-height: 20px;  /* Altezza minima per il handle */
+                        background: #888;  /* Handle color */
+                        min-height: 20px;  /* Minimum handle height */
                         border-radius: 6px;
                     }                
                     QScrollBar::handle:vertical:hover {
-                        background: #555;  /* Colore quando il mouse è sopra la maniglia */
+                        background: #555;  /* Handle hover color */
                     }               
                     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                         border: none;
@@ -96,18 +99,18 @@ def style(widget):
                     }                
                     QScrollBar:horizontal {
                         border: none;
-                        background: #E0E0E0;  /* Sfondo leggero per la scrollbar */
-                        height: 12px;  /* Altezza della scrollbar orizzontale */
+                        background: #E0E0E0;  /* Light scrollbar background */
+                        height: 12px;  /* Horizontal scrollbar height */
                         margin: 0 2px;
                         border-radius: 6px;
                     }                
                     QScrollBar::handle:horizontal {
-                        background: #888;  /* Colore principale della maniglia */
-                        min-width: 20px;  /* Larghezza minima per il handle */
+                        background: #888;  /* Handle color */
+                        min-width: 20px;  /* Minimum handle width */
                         border-radius: 6px;
                     }               
                     QScrollBar::handle:horizontal:hover {
-                        background: #555;  /* Colore quando il mouse è sopra la maniglia */
+                        background: #555;  /* Handle hover color */
                     }                
                     QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
                         border: none;
@@ -141,40 +144,41 @@ def style(widget):
 
 
 def update_checkbox_style(check_box, dmd_selection=False):
+    """Apply the checkbox style for a standard or DMD-selection control."""
     if dmd_selection:
         check_box.setStyleSheet("""
                     QCheckBox {
-                        spacing: 8px; /* Distanza tra il box e il testo */
+                        spacing: 8px; /* Spacing between indicator and text */
                         font-size: 12px;
                         font-family: Arial, Helvetica, sans-serif;
-                        color: #333; /* Colore del testo */
+                        color: #333; /* Text color */
                     }                   
                     QCheckBox::indicator {
-                        width: 12px; /* Larghezza del box */
-                        height: 12px; /* Altezza del box */
-                        border: 2px solid #888; /* Bordo del box */
-                        border-radius: 4px; /* Angoli arrotondati */
-                        background-color: #f0f0f0; /* Colore di sfondo del box */
+                        width: 12px; /* Indicator width */
+                        height: 12px; /* Indicator height */
+                        border: 2px solid #888; /* Indicator border */
+                        border-radius: 4px; /* Rounded corners */
+                        background-color: #f0f0f0; /* Background color del box */
                     }                   
                     QCheckBox::indicator:hover {
-                        border: 2px solid #555; /* Cambia il colore del bordo al passaggio del mouse */
-                        background-color: #e8e8e8; /* Cambia il colore di sfondo */
+                        border: 2px solid #555; /* Change border color on hover */
+                        background-color: #e8e8e8; /* Change background color */
                     }                   
                     QCheckBox::indicator:checked {
-                        background-color: blue; /* Colore di sfondo quando selezionato */
-                        border: 2px solid blue; /* Cambia il bordo quando selezionato */
+                        background-color: blue; /* Background color quando selezionato */
+                        border: 2px solid blue; /* Checked border color */
                     }                   
                     QCheckBox::indicator:checked:hover {
-                        background-color: blue; /* Sfondo più scuro quando selezionato e con hover */
-                        border: 2px solid blue; /* Bordo più scuro quando selezionato e con hover */
+                        background-color: blue; /* Checked hover background */
+                        border: 2px solid blue; /* Checked hover border */
                     }                   
                     QCheckBox::indicator:unchecked {
-                        background-color: #f0f0f0; /* Sfondo quando non selezionato */
-                        border: 2px solid #888; /* Bordo quando non selezionato */
+                        background-color: #f0f0f0; /* Unchecked background */
+                        border: 2px solid #888; /* Unchecked border */
                     }                   
                     QCheckBox::indicator:unchecked:hover {
-                        border: 2px solid #555; /* Bordo quando non selezionato e con hover */
-                        background-color: #e8e8e8; /* Sfondo quando non selezionato e con hover */
+                        border: 2px solid #555; /* Unchecked border e con hover */
+                        background-color: #e8e8e8; /* Unchecked background e con hover */
                     }
             """)
     else:
@@ -215,6 +219,7 @@ def update_checkbox_style(check_box, dmd_selection=False):
 
 
 def update_groupbox_style(group_box, mode, label1=None, label2=None, label3=None, label4=None):
+    """Update a group box and optional labels for the requested visual mode."""
     if mode == 'subgroup':
         group_box.setStyleSheet("""
                             QGroupBox {
@@ -308,24 +313,25 @@ def update_groupbox_style(group_box, mode, label1=None, label2=None, label3=None
 
 
 def update_toolbutton_style(tool_button, mode, clickable=False):
+    """Update a tool button according to its state and clickability."""
     if clickable:
         tool_button.setStyleSheet("""
                         QToolButton {
                             background-color: #f0f0f0; /* Sfondo base */
                             border: 2px solid #d0d0d0; /* Bordo sottile */
-                            border-radius: 8px; /* Angoli arrotondati */
+                            border-radius: 8px; /* Rounded corners */
                             padding: 6px;
-                            color: #333333; /* Colore del testo */
+                            color: #333333; /* Text color */
                             font: bold 14px "Arial";
                             text-align: center;
                             margin: 5px; /* Margine esterno */
                         }
                         QToolButton:hover {
-                            background-color: #e6f7ff; /* Colore di sfondo al passaggio del mouse */
+                            background-color: #e6f7ff; /* Background color al passaggio del mouse */
                             border: 2px solid #80bfff; /* Bordo evidenziato */
                         }
                         QToolButton:pressed {
-                            background-color: #cceeff; /* Colore di sfondo quando premuto */
+                            background-color: #cceeff; /* Background color quando premuto */
                             border: 2px solid #3399ff; /* Bordo quando premuto */
                         }                      
                         QToolButton:disabled {
@@ -368,6 +374,7 @@ def update_toolbutton_style(tool_button, mode, clickable=False):
 
 
 def update_lineedit_style(line_edit):
+    """Apply the standard line-edit style."""
     line_edit.setStyleSheet("""
                     QLineEdit {
                         padding: 4px 8px; 

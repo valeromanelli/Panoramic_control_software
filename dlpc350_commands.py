@@ -1,3 +1,5 @@
+"""High-level convenience commands for the DLPC350/LightCrafter controller."""
+
 from procrafter4500 import connect_usb
 import time
 
@@ -5,20 +7,21 @@ import time
 start_sector = 0
 temp_chksum = 0
 is_cache_file_exist = False
-bl_size = 128 * 1024                # è pari a questo valore solo se è checkato "Skip bootloader Mode"
+bl_size = 128 * 1024  # Used when bootloader programming is skipped.
 
-# Valori costanti per la firma e gli indirizzi
+# Firmware signature and address constants.
 FLASH_BASE_ADDRESS = 0xF9000000
 MAX_NUM_RETRIES = 5
 
 
 class DMD:
+    """In-memory representation of a DLPC350 pattern lookup table."""
     def __init__(self):
         self.g_pat_lut = []
         self.g_pat_lut_index = 0
 
     def clear_pat_lut(self):
-        self.g_pat_lut = [] # CHECK
+        self.g_pat_lut = []
         self.g_pat_lut_index = 0
         return 0
 
@@ -41,6 +44,7 @@ class DMD:
         return 0
 
 def process_flash_params_line(line, fd):
+    """Parse one flash-parameter line into a FlashDevice object."""
     line = line.strip()
     if line.startswith('/'):
         return False
@@ -77,6 +81,7 @@ def process_flash_params_line(line, fd):
 
 
 def get_sector_num(addr, fd):
+    """Return the flash sector containing the requested address."""
     i = 0
     while i < fd.num_sectors:
         if fd.sector_arr[i] > addr:
@@ -87,11 +92,13 @@ def get_sector_num(addr, fd):
 
 
 def get_num_images_in_flash():
+    """Read the number of images stored in DMD flash memory."""
     with connect_usb() as lcr:
         return lcr.get_num_images_in_flash()
 
 
 def set_dlpc350_in_pattern_mode():
+    """Switch the controller to pattern display mode."""
     i = 0
     with connect_usb() as lcr:
         _, mode = lcr.get_mode()
@@ -116,61 +123,73 @@ def set_dlpc350_in_pattern_mode():
 
 
 def set_pattern_trigger_mode(mode):
+    """Set the DLPC350 pattern trigger mode."""
     with connect_usb() as lcr:
         return lcr.set_pattern_trigger_mode(mode)
 
 
 def set_power_mode(mode):
+    """Set the DLPC350 standby state."""
     with connect_usb() as lcr:
         return lcr.set_power_mode(mode)
 
 
 def get_pattern_trigger_mode():
+    """Read the current pattern trigger mode."""
     with connect_usb() as lcr:
         return lcr.get_pattern_trigger_mode()
 
 
 def set_pattern_display_mode(mode):
+    """Select internal or external pattern display mode."""
     with connect_usb() as lcr:
         lcr.set_pattern_display_mode(mode)
 
 
 def set_pattern_config(num_lut_entries, repeat, num_patterns, num_splash_lut_entries):
+    """Configure pattern and splash-image lookup table lengths."""
     with connect_usb() as lcr:
         return lcr.set_pattern_config(num_lut_entries, repeat, num_patterns, num_splash_lut_entries)
 
 
 def set_exposure_frame_period(exposure_time, frame_period):
+    """Set pattern exposure and frame period in microseconds."""
     with connect_usb() as lcr:
         return lcr.set_exposure_frame_period(exposure_time, frame_period)
 
 
 def send_pat_lut(g_pat_lut_index, g_pat_lut):
+    """Upload the pattern lookup table."""
     with connect_usb() as lcr:
         return lcr.send_pat_lut(g_pat_lut_index, g_pat_lut)
 
 
 def send_image_lut(lut_entries, num_entries):
+    """Upload the splash-image lookup table."""
     with connect_usb() as lcr:
         return lcr.send_image_lut(lut_entries, num_entries)
 
 
 def start_pat_lut_validate():
+    """Start lookup-table validation."""
     with connect_usb() as lcr:
         return lcr.start_pat_lut_validate()
 
 
 def check_pat_lut_validate():
+    """Read the lookup-table validation result."""
     with connect_usb() as lcr:
         return lcr.check_pat_lut_validate()
 
 
 def pattern_display(action):
+    """Start, pause, or stop pattern display."""
     with connect_usb() as lcr:
         lcr.pattern_display(action)
 
 
 def pause_display():
+    """Pause pattern display and verify the resulting state."""
     i = 0
     with connect_usb() as lcr:
         lcr.pattern_display(1)
@@ -189,6 +208,7 @@ def pause_display():
 
 
 def stop_display():
+    """Stop pattern display and verify the resulting state."""
     i = 0
     with connect_usb() as lcr:
         lcr.pattern_display(0)
@@ -207,12 +227,14 @@ def stop_display():
 
 
 def get_led_currents():
+    """Read LED current values from the controller."""
     with connect_usb() as lcr:
         lcr.get_led_currents()
         return 255-lcr.red_led, lcr.green_led, 255-lcr.blue_led
 
 
 def set_led_configuration(red_current, green_current, blue_current):
+    """Set LED currents and controller-enable flags."""
     with connect_usb() as lcr:
         lcr.set_led_enables(True, False, False, False)
 

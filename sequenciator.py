@@ -1,16 +1,21 @@
-import nidaqmx
+"""Digital sequence generation for the panoramic optical-mapping platform.
+
+The classes in this module construct packed NI-DAQ digital waveforms for camera
+triggers, DMD pattern triggers, LED enables, and optional electrical-stimulation
+protocols. Durations supplied to the public phase methods are expressed in
+milliseconds unless stated otherwise."""
+
 import numpy as np
 import math
-import matplotlib.pyplot as plt
-from nidaqmx.constants import LineGrouping, AcquisitionType
 
 
 class Sequenciator:
+    """Build the complete experimental waveform for four cameras and four DMDs."""
     def __init__(self, scan_rate, red_duty_cycle, blue_duty_cycle, electrical_stimulation):
         self.scan_rate = scan_rate
         self.point_interval = 1 / scan_rate
         self.electrical_stimulation = electrical_stimulation
-        self.shock = True if self.electrical_stimulation else False
+        self.shock = bool(self.electrical_stimulation)
         red_duty_cycle = 0.01 * red_duty_cycle
         blue_duty_cycle = 0.01 * blue_duty_cycle
 
@@ -39,8 +44,7 @@ class Sequenciator:
         half_period_short = math.floor(self.n_point_period / 2)
         half_period_long = self.n_point_period - half_period_short
 
-        # serve se i due semiperiodi sono a loro volta dispari altrimenti non tornano le dimensione dei vettori
-        # il long si riferisce al semiperiod
+        # Split odd half-periods so that the generated vectors preserve the exact period length.
 
         if half_period_long % 2 == 0:
             numb_long_l = int(half_period_long / 2)
@@ -49,7 +53,7 @@ class Sequenciator:
             numb_long_l = math.floor(half_period_long / 2)
             numb_long_h = math.ceil(half_period_long / 2)
 
-        # gli one sono corto perché abbiamo allungato il tempo in cui la camera è spenta
+        # The high interval uses the shorter half because the camera-off interval is extended.
         if half_period_short % 2 == 0:
             numb_short_l = int(half_period_short / 2)
             numb_short_h = int(half_period_short / 2)
@@ -63,7 +67,7 @@ class Sequenciator:
         zeros_long = np.zeros((1, numb_long_h), dtype=np.uint8)
 
         # RED
-        # lo short è riferito al periodo
+        # "short" and "long" refer to the two half-period lengths.
         numb_ones_points_red_short = math.ceil(half_period_short * red_duty_cycle)
         numb_zeros_points_red_short = half_period_short - numb_ones_points_red_short
 
@@ -92,7 +96,7 @@ class Sequenciator:
         self.delay = 2310
         self.delay_red = int(numb_short_h - half_period_short * red_duty_cycle)
         self.conc_trig_cam = np.hstack((vect_ones_cam, vect_zeros_cam))
-        self.conc_trig_patt = np.hstack((zeros_short, ones_short, zeros_long, ones_long)) #short e long è sempre riferito al periodo
+        self.conc_trig_patt = np.hstack((zeros_short, ones_short, zeros_long, ones_long))  # Short and long always refer to half-period lengths.
         self.conc_trig_en_red = np.hstack((zeros_points_red_short, ones_points_red_short, zeros_points_red_long, ones_points_red_long))
         self.conc_trig_en_blue = np.hstack((ones_points_blue_short, zeros_points_blue_short, ones_points_blue_long, zeros_points_blue_long))
 
@@ -102,6 +106,7 @@ class Sequenciator:
         self.array_en_blue = np.array([])
 
     def define_pre_ill_array(self, time_pre_ill):
+        """Append a pre-illumination phase and return its quantized duration in seconds."""
         self.time_pre_ill = time_pre_ill
         n_periods = math.ceil(time_pre_ill * 0.001 / self.period)
         self.n_points_pre_ill = n_periods * self.n_point_period
@@ -120,9 +125,9 @@ class Sequenciator:
         return self.real_time_pre_ill
 
     def define_pre_stim_array(self, time_pre_stim):
+        """Append a pre-stimulation acquisition phase and return its duration in seconds."""
         self.time_pre_stim = time_pre_stim
         n_periods = math.ceil(time_pre_stim * 0.001 / self.period)
-        print(n_periods)
         self.n_points_pre_stim = n_periods * self.n_point_period
         self.real_time_pre_stim = n_periods * self.period
 
@@ -139,9 +144,9 @@ class Sequenciator:
         return self.real_time_pre_stim
 
     def define_stim_array(self, time_stim):
+        """Append an optical-stimulation phase and return its duration in seconds."""
         self.time_stim = time_stim
         n_periods = math.ceil(time_stim * 0.001 / self.period)
-        print(n_periods)
         self.n_points_stim = n_periods * self.n_point_period
         self.real_time_stim = n_periods * self.period
 
@@ -158,9 +163,9 @@ class Sequenciator:
         return self.real_time_stim
 
     def define_post_stim_array(self, time_post_stim):
+        """Append a post-stimulation acquisition phase and return its duration in seconds."""
         self.time_post_stim = time_post_stim
         n_periods = math.ceil(time_post_stim * 0.001 / self.period)
-        print(n_periods)
         self.n_points_post_stim = n_periods * self.n_point_period
         self.real_time_post_stim = n_periods * self.period
 
@@ -177,6 +182,7 @@ class Sequenciator:
         return self.real_time_post_stim
 
     def define_array_to_send(self):
+        """Pack all digital lines into the uint32 waveform expected by NI-DAQ."""
         delay_array = np.zeros((4, self.delay), dtype=np.uint8)
         delay_red_array = np.zeros((4, self.delay_red), dtype=np.uint8)
 
@@ -200,11 +206,12 @@ class Sequenciator:
         return array_to_send, self.shock
 
     def shocker(self, dict):
+        """Generate the optional electrical-stimulation waveform."""
         for key in dict.keys():
             if key == 'Constant':
-                delay_points = int(dict[key][0] * 1e-3 * self.scan_rate)
-                duration = dict[key][1] * 1e-3
-                period = 1 / dict[key][2]
+                delay_points = int(protocol[key][0] * 1e-3 * self.scan_rate)
+                duration = protocol[key][1] * 1e-3
+                period = 1 / protocol[key][2]
                 n_points_high = int(period * self.scan_rate / 2)
                 high_points = np.ones((1, n_points_high), dtype=np.uint8)
                 low_points = np.zeros((1, n_points_high), dtype=np.uint8)
@@ -220,9 +227,9 @@ class Sequenciator:
                     array = np.hstack((array, np.zeros((1, missing_points))))
 
             elif key == 'S1S2':
-                values = dict[key][0]
+                values = protocol[key][0]
                 start_cl = values[0] / 1000
-                pre_cond = dict[key][1]
+                pre_cond = protocol[key][1]
 
                 n_points_to_add = 0
                 if self.n_points_pre_ill > 0:
@@ -254,8 +261,8 @@ class Sequenciator:
                     array = np.hstack((array, np.zeros((1, missing_points))))
 
             elif key == "Ramp":
-                cl_values = dict[key][0]
-                numb_pulses = dict[key][1]
+                cl_values = protocol[key][0]
+                numb_pulses = protocol[key][1]
 
                 array = np.zeros((1, 0))
                 for value in cl_values:
@@ -275,15 +282,30 @@ class Sequenciator:
 
 
 class SequenciatorJunior:
-    def __init__(self, dc_red_dmd1, dc_blue_dmd1, dc_red_dmd2, dc_blue_dmd2, dc_red_dmd3, dc_blue_dmd3, dc_red_dmd4, dc_blue_dmd4):
-        self.scan_rate = 1000000
+    """Build a finite waveform used to enable selected DMD LED channels."""
+    def __init__(
+        self,
+        dc_red_dmd1,
+        dc_blue_dmd1,
+        dc_red_dmd2,
+        dc_blue_dmd2,
+        dc_red_dmd3,
+        dc_blue_dmd3,
+        dc_red_dmd4,
+        dc_blue_dmd4,
+        duration_ms=60_000,
+        scan_rate=1_000_000,
+    ):
+        self.scan_rate = scan_rate
         self.scan_interval = 1 / self.scan_rate
 
-        self.point_x_period = 500
+        self.point_x_period = int(self.scan_rate / 2_000)
 
-        self.time = 60000
+        self.time = duration_ms
         self.numb_periods = int(2 * self.time)
         self.numb_points = int(self.numb_periods * self.point_x_period)
+        if self.numb_points < 250:
+            raise ValueError("duration_ms and scan_rate must generate at least 250 samples")
 
         self.dc_red_dmd1 = 0.01 * dc_red_dmd1
         self.dc_blue_dmd1 = 0.01 * dc_blue_dmd1
@@ -295,135 +317,140 @@ class SequenciatorJunior:
         self.dc_blue_dmd4 = 0.01 * dc_blue_dmd4
 
     def enable_dmd1(self, red, blue):
+        """Set the enabled LED channels for DMD 1."""
         if red:
-            trig_dmd1 = np.ones((1, self.numb_points - 250))
-            trig_dmd1 = np.hstack((np.zeros((1, 250)), trig_dmd1))
+            trig_dmd1 = np.ones((1, self.numb_points - 250), dtype=np.uint8)
+            trig_dmd1 = np.hstack((np.zeros((1, 250), dtype=np.uint8), trig_dmd1))
 
             high_red = int(self.point_x_period * self.dc_red_dmd1)
             low_red = int(self.point_x_period - high_red)
-            period = np.hstack((np.zeros((1, low_red)), np.ones((1, high_red))))
+            period = np.hstack((np.zeros((1, low_red), dtype=np.uint8), np.ones((1, high_red), dtype=np.uint8)))
 
             enable_red_dmd1 = np.tile(period, (1, self.numb_periods))
-            enable_blue_dmd1 = np.zeros((1, self.numb_points))
+            enable_blue_dmd1 = np.zeros((1, self.numb_points), dtype=np.uint8)
 
         elif blue:
-            trig_dmd1 = np.zeros((1, self.numb_points - 250))
-            trig_dmd1 = np.hstack((np.ones((1, 250)), trig_dmd1))
+            trig_dmd1 = np.zeros((1, self.numb_points - 250), dtype=np.uint8)
+            trig_dmd1 = np.hstack((np.ones((1, 250), dtype=np.uint8), trig_dmd1))
 
             high_blue = int(self.point_x_period * self.dc_blue_dmd1)
             low_blue = int(self.point_x_period - high_blue)
-            period = np.hstack((np.zeros((1, low_blue)), np.ones((1, high_blue))))
+            period = np.hstack((np.zeros((1, low_blue), dtype=np.uint8), np.ones((1, high_blue), dtype=np.uint8)))
 
-            enable_red_dmd1 = np.zeros((1, self.numb_points))
+            enable_red_dmd1 = np.zeros((1, self.numb_points), dtype=np.uint8)
             enable_blue_dmd1 = np.tile(period, (1, self.numb_periods))
 
         else:
-            trig_dmd1 = np.zeros((1, self.numb_points))
-            enable_red_dmd1 = np.zeros((1, self.numb_points))
-            enable_blue_dmd1 = np.zeros((1, self.numb_points))
+            trig_dmd1 = np.zeros((1, self.numb_points), dtype=np.uint8)
+            enable_red_dmd1 = np.zeros((1, self.numb_points), dtype=np.uint8)
+            enable_blue_dmd1 = np.zeros((1, self.numb_points), dtype=np.uint8)
 
         self.trig_dmd1 = trig_dmd1
         self.enable_red_dmd1 = enable_red_dmd1
         self.enable_blue_dmd1 = enable_blue_dmd1
 
     def enable_dmd2(self, red, blue):
+        """Set the enabled LED channels for DMD 2."""
         if red:
-            trig_dmd2 = np.ones((1, self.numb_points - 250))
-            trig_dmd2 = np.hstack((np.zeros((1, 250)), trig_dmd2))
+            trig_dmd2 = np.ones((1, self.numb_points - 250), dtype=np.uint8)
+            trig_dmd2 = np.hstack((np.zeros((1, 250), dtype=np.uint8), trig_dmd2))
 
             high_red = int(self.point_x_period * self.dc_red_dmd2)
             low_red = int(self.point_x_period - high_red)
-            period = np.hstack((np.zeros((1, low_red)), np.ones((1, high_red))))
+            period = np.hstack((np.zeros((1, low_red), dtype=np.uint8), np.ones((1, high_red), dtype=np.uint8)))
 
             enable_red_dmd2 = np.tile(period, (1, self.numb_periods))
-            enable_blue_dmd2 = np.zeros((1, self.numb_points))
+            enable_blue_dmd2 = np.zeros((1, self.numb_points), dtype=np.uint8)
 
         elif blue:
-            trig_dmd2 = np.zeros((1, self.numb_points - 250))
-            trig_dmd2 = np.hstack((np.ones((1, 250)), trig_dmd2))
+            trig_dmd2 = np.zeros((1, self.numb_points - 250), dtype=np.uint8)
+            trig_dmd2 = np.hstack((np.ones((1, 250), dtype=np.uint8), trig_dmd2))
 
             high_blue = int(self.point_x_period * self.dc_blue_dmd2)
             low_blue = int(self.point_x_period - high_blue)
-            period = np.hstack((np.zeros((1, low_blue)), np.ones((1, high_blue))))
+            period = np.hstack((np.zeros((1, low_blue), dtype=np.uint8), np.ones((1, high_blue), dtype=np.uint8)))
 
-            enable_red_dmd2 = np.zeros((1, self.numb_points))
+            enable_red_dmd2 = np.zeros((1, self.numb_points), dtype=np.uint8)
             enable_blue_dmd2 = np.tile(period, (1, self.numb_periods))
 
         else:
-            trig_dmd2 = np.zeros((1, self.numb_points))
-            enable_red_dmd2 = np.zeros((1, self.numb_points))
-            enable_blue_dmd2 = np.zeros((1, self.numb_points))
+            trig_dmd2 = np.zeros((1, self.numb_points), dtype=np.uint8)
+            enable_red_dmd2 = np.zeros((1, self.numb_points), dtype=np.uint8)
+            enable_blue_dmd2 = np.zeros((1, self.numb_points), dtype=np.uint8)
 
         self.trig_dmd2 = trig_dmd2
         self.enable_red_dmd2 = enable_red_dmd2
         self.enable_blue_dmd2 = enable_blue_dmd2
 
     def enable_dmd3(self, red, blue):
+        """Set the enabled LED channels for DMD 3."""
         if red:
-            trig_dmd3 = np.ones((1, self.numb_points - 250))
-            trig_dmd3 = np.hstack((np.zeros((1, 250)), trig_dmd3))
+            trig_dmd3 = np.ones((1, self.numb_points - 250), dtype=np.uint8)
+            trig_dmd3 = np.hstack((np.zeros((1, 250), dtype=np.uint8), trig_dmd3))
 
             high_red = int(self.point_x_period * self.dc_red_dmd3)
             low_red = int(self.point_x_period - high_red)
-            period = np.hstack((np.zeros((1, low_red)), np.ones((1, high_red))))
+            period = np.hstack((np.zeros((1, low_red), dtype=np.uint8), np.ones((1, high_red), dtype=np.uint8)))
 
             enable_red_dmd3 = np.tile(period, (1, self.numb_periods))
-            enable_blue_dmd3 = np.zeros((1, self.numb_points))
+            enable_blue_dmd3 = np.zeros((1, self.numb_points), dtype=np.uint8)
 
         elif blue:
-            trig_dmd3 = np.zeros((1, self.numb_points - 250))
-            trig_dmd3 = np.hstack((np.ones((1, 250)), trig_dmd3))
+            trig_dmd3 = np.zeros((1, self.numb_points - 250), dtype=np.uint8)
+            trig_dmd3 = np.hstack((np.ones((1, 250), dtype=np.uint8), trig_dmd3))
 
             high_blue = int(self.point_x_period * self.dc_blue_dmd3)
             low_blue = int(self.point_x_period - high_blue)
-            period = np.hstack((np.zeros((1, low_blue)), np.ones((1, high_blue))))
+            period = np.hstack((np.zeros((1, low_blue), dtype=np.uint8), np.ones((1, high_blue), dtype=np.uint8)))
 
-            enable_red_dmd3 = np.zeros((1, self.numb_points))
+            enable_red_dmd3 = np.zeros((1, self.numb_points), dtype=np.uint8)
             enable_blue_dmd3 = np.tile(period, (1, self.numb_periods))
 
         else:
-            trig_dmd3 = np.zeros((1, self.numb_points))
-            enable_red_dmd3 = np.zeros((1, self.numb_points))
-            enable_blue_dmd3 = np.zeros((1, self.numb_points))
+            trig_dmd3 = np.zeros((1, self.numb_points), dtype=np.uint8)
+            enable_red_dmd3 = np.zeros((1, self.numb_points), dtype=np.uint8)
+            enable_blue_dmd3 = np.zeros((1, self.numb_points), dtype=np.uint8)
 
         self.trig_dmd3 = trig_dmd3
         self.enable_red_dmd3 = enable_red_dmd3
         self.enable_blue_dmd3 = enable_blue_dmd3
 
     def enable_dmd4(self, red, blue):
+        """Set the enabled LED channels for DMD 4."""
         if red:
-            trig_dmd4 = np.ones((1, self.numb_points - 250))
-            trig_dmd4 = np.hstack((np.zeros((1, 250)), trig_dmd4))
+            trig_dmd4 = np.ones((1, self.numb_points - 250), dtype=np.uint8)
+            trig_dmd4 = np.hstack((np.zeros((1, 250), dtype=np.uint8), trig_dmd4))
 
             high_red = int(self.point_x_period * self.dc_red_dmd4)
             low_red = int(self.point_x_period - high_red)
-            period = np.hstack((np.zeros((1, low_red)), np.ones((1, high_red))))
+            period = np.hstack((np.zeros((1, low_red), dtype=np.uint8), np.ones((1, high_red), dtype=np.uint8)))
 
             enable_red_dmd4 = np.tile(period, (1, self.numb_periods))
-            enable_blue_dmd4 = np.zeros((1, self.numb_points))
+            enable_blue_dmd4 = np.zeros((1, self.numb_points), dtype=np.uint8)
 
         elif blue:
-            trig_dmd4 = np.zeros((1, self.numb_points - 250))
-            trig_dmd4 = np.hstack((np.ones((1, 250)), trig_dmd4))
+            trig_dmd4 = np.zeros((1, self.numb_points - 250), dtype=np.uint8)
+            trig_dmd4 = np.hstack((np.ones((1, 250), dtype=np.uint8), trig_dmd4))
 
             high_blue = int(self.point_x_period * self.dc_blue_dmd4)
             low_blue = int(self.point_x_period - high_blue)
-            period = np.hstack((np.zeros((1, low_blue)), np.ones((1, high_blue))))
+            period = np.hstack((np.zeros((1, low_blue), dtype=np.uint8), np.ones((1, high_blue), dtype=np.uint8)))
 
-            enable_red_dmd4 = np.zeros((1, self.numb_points))
+            enable_red_dmd4 = np.zeros((1, self.numb_points), dtype=np.uint8)
             enable_blue_dmd4 = np.tile(period, (1, self.numb_periods))
 
         else:
-            trig_dmd4 = np.zeros((1, self.numb_points))
-            enable_red_dmd4 = np.zeros((1, self.numb_points))
-            enable_blue_dmd4 = np.zeros((1, self.numb_points))
+            trig_dmd4 = np.zeros((1, self.numb_points), dtype=np.uint8)
+            enable_red_dmd4 = np.zeros((1, self.numb_points), dtype=np.uint8)
+            enable_blue_dmd4 = np.zeros((1, self.numb_points), dtype=np.uint8)
 
         self.trig_dmd4 = trig_dmd4
         self.enable_red_dmd4 = enable_red_dmd4
         self.enable_blue_dmd4 = enable_blue_dmd4
 
     def define_array_to_send(self):
-        array = np.zeros((4, self.numb_points))
+        """Pack the manual-illumination waveform into uint32 samples."""
+        array = np.zeros((4, self.numb_points), dtype=np.uint8)
 
         array = np.vstack((array,
                             self.trig_dmd1, self.trig_dmd2, self.trig_dmd3, self.trig_dmd4,
@@ -439,6 +466,7 @@ class SequenciatorJunior:
 
 
 class SequenciatorThreshold:
+    """Build optical-stimulation pulses for threshold estimation."""
     def __init__(self, numb_cycles, frequency, cycle_duration):
         self.numb_cycles = numb_cycles
         self.frequency = frequency
@@ -457,6 +485,7 @@ class SequenciatorThreshold:
         self.numb_periods_x_cycle = int(self.points_x_cycle / self.point_x_period)
 
     def change_frequency(self, frequency):
+        """Update the test frequency and recompute dependent timing values."""
         self.frequency = frequency
         new_length_array = int(self.scan_rate * self.numb_cycles / self.frequency)
 
@@ -468,6 +497,7 @@ class SequenciatorThreshold:
             self.length_array = new_length_array
 
     def change_numb_cycles(self, numb_cycles):
+        """Update the number of threshold-test cycles."""
         self.numb_cycles = numb_cycles
         new_length_array = int(self.scan_rate * self.numb_cycles / self.frequency)
 
@@ -479,11 +509,13 @@ class SequenciatorThreshold:
             self.length_array = new_length_array
 
     def change_cycle_duration(self, cycle_duration):
+        """Update the duration of one threshold-test cycle."""
         self.cycle_duration = 0.001 * cycle_duration
         self.points_x_cycle = int(self.cycle_duration * self.scan_rate)
         self.numb_periods_x_cycle = int(self.points_x_cycle / self.point_x_period)
 
     def define_array_to_send(self, blue_duty_cycle):
+        """Generate the threshold-test waveform for the requested blue duty cycle."""
         if self.array.shape[1] == 16:
             self.array = self.array[:, :-4]
         blue_dc = 0.01 * blue_duty_cycle
@@ -507,132 +539,3 @@ class SequenciatorThreshold:
         array_to_send = np.sum(self.array * (2 ** np.arange(0, self.array.shape[1], 1)), axis=1).astype(np.uint32)
 
         return array_to_send, self.scan_rate
-
-
-if __name__ == '__main__':
-    """seq = SequenciatorThreshold(2, 10, 4)
-    array = seq.define_array_to_send(50)"""
-    scan_rate = 10000000
-    scan_time = 1 / scan_rate
-
-    time_pre_ill = 200
-    time_pre_stim = 200
-    time_stim = 3000
-    time_post_stim = 200
-
-    start_frequency = 5
-    pre_cond = 2
-    final_frequency = 10
-    step = 2
-    if final_frequency > start_frequency:
-        sn_values = np.arange(start_frequency, final_frequency + 1, step)
-    else:
-        sn_values = np.arange(start_frequency, final_frequency - 1, -step)
-    time_el_stim = 1 / sn_values[0] * pre_cond
-    for value in sn_values[1:]:
-        time_el_stim += 1 / value
-    if time_el_stim * 1000 > time_stim:
-        print("NO!")
-
-    dict = {'S1S2': [sn_values, pre_cond]}
-    sequenciator = Sequenciator(scan_rate, 5, 50, dict)
-
-    sequenciator.define_pre_ill_array(time_pre_ill)
-    sequenciator.define_pre_stim_array(time_pre_stim)
-    sequenciator.define_stim_array(time_stim)
-    sequenciator.define_post_stim_array(time_post_stim)
-
-    array_to_send, _ = sequenciator.define_array_to_send()
-
-    master_task = nidaqmx.Task()
-    master_task.do_channels.add_do_chan("Dev2/port0/line0:31", line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
-    master_task.timing.cfg_samp_clk_timing(rate=scan_rate, sample_mode=AcquisitionType.FINITE, samps_per_chan=array_to_send.size)
-    number_of_samples_written = master_task.write(array_to_send)
-
-    master_task.start()
-    master_task.wait_until_done(timeout=scan_time * array_to_send.size + 1)
-    master_task.stop()
-
-    point_interval = point_interval * 1000
-    time_pre_ill = time_pre_ill * 1000
-    time_pre_stim = time_pre_stim * 1000
-    time_stim = time_stim * 1000
-    time_post_stim = time_post_stim * 1000
-
-    total_time = time_pre_ill + time_pre_stim + time_stim + time_post_stim
-
-    v_total_time = np.arange(0, total_time, point_interval)
-    v_total_time = v_total_time[:len(v_total_time) - 1]
-
-    plt.figure(figsize=(10, 10))
-    plt.subplot(4, 1, 1)
-    plt.step(v_total_time, array[0, :], linewidth=2, where='post')
-    plt.axvline(x=time_pre_ill, color='r', linestyle='--')
-    plt.axvline(x=time_pre_ill + time_pre_stim, color='r', linestyle='--')
-    plt.axvline(x=time_pre_ill + time_pre_stim + time_stim, color='r', linestyle='--')
-    plt.axvline(x=time_pre_ill + time_pre_stim + time_stim + time_post_stim, color='r', linestyle='--')
-    plt.ylim(-0.5, 1.5)
-    plt.ylabel('Trig Cam 1')
-    plt.grid(True)
-
-    plt.subplot(4, 1, 2)
-    plt.step(v_total_time, array[4, :], linewidth=2, where='post')
-    plt.axvline(x=time_pre_ill, color='r', linestyle='--')
-    plt.axvline(x=time_pre_ill + time_pre_stim, color='r', linestyle='--')
-    plt.axvline(x=time_pre_ill + time_pre_stim + time_stim, color='r', linestyle='--')
-    plt.axvline(x=time_pre_ill + time_pre_stim + time_stim + time_post_stim, color='r', linestyle='--')
-    plt.ylim(-0.5, 1.5)
-    plt.ylabel('Trig Pattern DMD 1')
-    plt.grid(True)
-
-    plt.subplot(4, 1, 3)
-    plt.step(v_total_time, array[8, :], linewidth=2, where='post')
-    plt.axvline(x=time_pre_ill, color='r', linestyle='--')
-    plt.axvline(x=time_pre_ill + time_pre_stim, color='r', linestyle='--')
-    plt.axvline(x=time_pre_ill + time_pre_stim + time_stim, color='r', linestyle='--')
-    plt.axvline(x=time_pre_ill + time_pre_stim + time_stim + time_post_stim, color='r', linestyle='--')
-    plt.ylim(-0.5, 1.5)
-    plt.ylabel('En Red LED DMD 1')
-    plt.grid(True)
-
-    plt.subplot(4, 1, 4)
-    plt.step(v_total_time, array[12, :], linewidth=2, where='post')
-    plt.axvline(x=time_pre_ill, color='r', linestyle='--')
-    plt.axvline(x=time_pre_ill + time_pre_stim, color='r', linestyle='--')
-    plt.axvline(x=time_pre_ill + time_pre_stim + time_stim, color='r', linestyle='--')
-    plt.axvline(x=time_pre_ill + time_pre_stim + time_stim + time_post_stim, color='r', linestyle='--')
-    plt.ylim(-0.5, 1.5)
-    plt.ylabel('En Blue LED DMD 1')
-    plt.grid(True)
-
-    plt.suptitle('Tutte le Fasi')
-    plt.show()
-
-    sequenciator_junior = SequenciatorJunior(50, 50, 5, 50, 5, 50, 5, 50)
-    sequenciator_junior.enable_dmd1(False, True)
-    sequenciator_junior.enable_dmd2(False, True)
-    sequenciator_junior.enable_dmd3(True, False)
-    sequenciator_junior.enable_dmd4(False, True)
-
-    array_to_send = sequenciator_junior.define_array_to_send()
-
-    #plot array
-    """time = np.arange(0, array.shape[1], 1)
-    plt.figure(figsize=(10, 10))
-    plt.subplot(4, 1, 1)
-    plt.step(time, array[4, :], linewidth=2, where='post')
-    plt.ylim(-0.5, 1.5)
-    plt.ylabel('Trig DMD 1')
-    plt.grid(True)
-    plt.show()"""
-
-    time = 1/1000000
-    master_task = nidaqmx.Task()
-    master_task.do_channels.add_do_chan("Dev2/port0/line0:31", line_grouping=LineGrouping.CHAN_FOR_ALL_LINES)
-    master_task.timing.cfg_samp_clk_timing(rate=1000000, sample_mode=AcquisitionType.FINITE,
-                                           samps_per_chan=array_to_send.size)
-    number_of_samples_written = master_task.write(array_to_send)
-
-    master_task.start()
-    master_task.wait_until_done(timeout=time * array_to_send.size + 1)
-    master_task.stop()

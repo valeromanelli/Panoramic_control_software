@@ -1,8 +1,11 @@
+"""Render device-state overlays on the platform-status illustration."""
+
 from PyQt6.QtCore import QSize
 from PyQt6.QtGui import QPainter
 
 
 class Giotto:
+    """Maintain and draw the visual state of cameras and DMDs."""
     def __init__(self, image_on, image_off):
         self.image_on = image_on
         self.image_off = image_off

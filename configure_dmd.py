@@ -1,3 +1,15 @@
+"""Graphical interface for configuring and controlling the DMD subsystem.
+
+The window manages LightCrafter firmware images, pattern upload and preview,
+pattern lookup tables, LED-current commands, and synchronized control of up to
+four digital micromirror devices (DMDs).
+
+Hardware operations are delegated to the command and worker-thread modules so
+that long-running USB, firmware, and camera operations do not block the Qt user
+interface.
+"""
+
+import runtime_config as cfg
 import os
 import shutil
 import nidaqmx
@@ -17,8 +29,23 @@ import firmware_commands as fc
 
 
 class ConfigureDMD(QMainWindow):
+    """Provide the DMD configuration and pattern-management window.
+
+    The window coordinates four LightCrafter controllers, firmware image editing,
+    pattern LUT validation, optical-stimulation presets, camera previews, and LED
+    current configuration. The parent platform window supplies the connected-device
+    state and shared experiment metadata.
+    """
     new_info_signal = pyqtSignal(str, object, str)
     def __init__(self, parent=None):
+        """Initialize the DMD manager and construct its Qt interface.
+
+        Parameters
+        ----------
+        parent : QMainWindow, optional
+            Parent platform window. It must expose the connected DMD list, camera
+            controls, experiment metadata, and platform-status widgets used here.
+        """
         super().__init__(parent)
 
         self.setWindowTitle("DMD Device Manager")
@@ -714,11 +741,17 @@ class ConfigureDMD(QMainWindow):
 
     # METHODS
     def add_pattern(self):
+        """Append a 912 x 1140 BMP image to the editable firmware image list.
+
+        The method updates the splash-image counters and refreshes the preview area.
+        A warning is shown when the firmware limit is reached or the selected image has
+        an unsupported resolution.
+        """
         if self.m_splash_image_add_index == fc.MAX_SPLASH_IMAGES:
             QMessageBox.warning(self, "Warning", "Only 256 images can be added.")
             return
 
-        file_path = "D:/images"
+        file_path = str(cfg.PATTERN_OUTPUT_DIRECTORY)
         file_name, _ = QFileDialog.getOpenFileName(self, "Select Splash Image", file_path, "BMP Files (*.bmp)")
         if file_name:
             img = QImage(file_name)
@@ -739,11 +772,22 @@ class ConfigureDMD(QMainWindow):
             self.update_scroll_area()
 
     def acquire_single_frame(self):
+        """Acquire one preview frame from each configured camera.
+
+        Camera subarray mode is enabled before starting the asynchronous acquisition
+        thread. The resulting frames are handled by :meth:`enable_preview_buttons`.
+        """
         self.parent.control_camera_gui.subarray_mode(True)
 
         self.acquire_single_frame_thread.start()
 
     def add_all_patterns_to_lut(self):
+        """Continue LUT configuration for the currently selected DMD.
+
+        This method dispatches to the device-specific LUT routine identified by
+        ``self.dmd_selected``. It is also used while configuring all connected DMDs in
+        sequence.
+        """
         if self.dmd_selected == 1:
             self.add_dmd1_patterns_to_lut()
 
@@ -759,6 +803,13 @@ class ConfigureDMD(QMainWindow):
             self.add_dmd4_patterns_to_lut()
 
     def add_dmd1_patterns_to_lut(self, warning=True):
+        """Build and validate the selected red/blue pattern LUT for DMD 1.
+
+        Parameters
+        ----------
+        warning : bool, default=True
+            Show a warning when DMD 1 is not connected.
+        """
         if self.parent.avoid_overray:
             QMessageBox.warning(self, "Warning", "Please turn off the DMDs before sending this command. Risk of command overload to the PCIe-6612!")
             return
@@ -781,6 +832,13 @@ class ConfigureDMD(QMainWindow):
             QMessageBox.warning(self, "Warning", "DMD 1 is not connected to the system!", QMessageBox.StandardButton.Ok)
 
     def add_dmd2_patterns_to_lut(self, warning=True):
+        """Build and validate the selected red/blue pattern LUT for DMD 2.
+
+        Parameters
+        ----------
+        warning : bool, default=True
+            Show a warning when DMD 2 is not connected.
+        """
         if self.parent.avoid_overray:
             QMessageBox.warning(self, "Warning", "Please turn off the DMDs before sending this command. Risk of command overload to the PCIe-6612!")
             return
@@ -802,6 +860,13 @@ class ConfigureDMD(QMainWindow):
             QMessageBox.warning(self, "Warning", "DMD 2 is not connected to the system!", QMessageBox.StandardButton.Ok)
 
     def add_dmd3_patterns_to_lut(self, warning=True):
+        """Build and validate the selected red/blue pattern LUT for DMD 3.
+
+        Parameters
+        ----------
+        warning : bool, default=True
+            Show a warning when DMD 3 is not connected.
+        """
         if self.parent.avoid_overray:
             QMessageBox.warning(self, "Warning", "Please turn off the DMDs before sending this command. Risk of command overload to the PCIe-6612!")
             return
@@ -824,6 +889,13 @@ class ConfigureDMD(QMainWindow):
             QMessageBox.warning(self, "Warning", "DMD 3 is not connected to the system!", QMessageBox.StandardButton.Ok)
 
     def add_dmd4_patterns_to_lut(self, warning=True):
+        """Build and validate the selected red/blue pattern LUT for DMD 4.
+
+        Parameters
+        ----------
+        warning : bool, default=True
+            Show a warning when DMD 4 is not connected.
+        """
         if self.parent.avoid_overray:
             QMessageBox.warning(self, "Warning", "Please turn off the DMDs before sending this command. Risk of command overload to the PCIe-6612!")
             return
@@ -846,6 +918,11 @@ class ConfigureDMD(QMainWindow):
             QMessageBox.warning(self, "Warning", "DMD 4 is not connected to the system!", QMessageBox.StandardButton.Ok)
 
     def allow_dmd_selection(self):
+        """Enable or disable individual DMD selection controls.
+
+        The radio buttons are available only when selective DMD control is enabled by
+        the corresponding checkbox.
+        """
         if self.use_selection_dmd.isChecked():
             self.dmd1_radiobutton.setEnabled(True)
             self.dmd2_radiobutton.setEnabled(True)
@@ -858,7 +935,12 @@ class ConfigureDMD(QMainWindow):
             self.dmd4_radiobutton.setEnabled(False)
 
     def browse_pattern_file(self):
-        self.file_path, _ = QFileDialog.getOpenFileName(self, "Select BIN File", "C:/Users/Panoramic/Desktop/Pattern Files Repository", "BIN Files (*.bin)")
+        """Select a firmware binary containing patterns for upload.
+
+        The selected file is assigned to the upload worker, displayed in the path
+        field, and parsed asynchronously to populate the pattern preview.
+        """
+        self.file_path, _ = QFileDialog.getOpenFileName(self, "Select BIN File", str(cfg.PATTERN_REPOSITORY), "BIN Files (*.bin)")
         if self.file_path:
             self.clear_all()
             if self.firm_file_line.text() != "":
@@ -871,7 +953,12 @@ class ConfigureDMD(QMainWindow):
             self.show_patterns(True)
 
     def browse_firmware_file(self):
-        self.file_path_modified, _ = QFileDialog.getOpenFileName(self, "Select BIN File", "C:/Users/Panoramic/Desktop/Pattern Files Repository", "BIN Files (*.bin)")
+        """Select an existing firmware binary for inspection or modification.
+
+        Current splash-image counters and previews are reset before the selected
+        firmware is parsed by the background worker.
+        """
+        self.file_path_modified, _ = QFileDialog.getOpenFileName(self, "Select BIN File", str(cfg.PATTERN_REPOSITORY), "BIN Files (*.bin)")
         if self.file_path_modified:
             self.clear_all()
 
@@ -893,13 +980,18 @@ class ConfigureDMD(QMainWindow):
             self.show_images_thread.start()
 
     def change_pattern(self):
+        """Replace the currently selected splash image with another BMP file.
+
+        Only 912 x 1140 images are accepted. The firmware preview is refreshed after a
+        successful replacement.
+        """
         index = self.select_index_spinbox.value()
 
         if not self.m_added_splash_images[index]:
             QMessageBox.warning(self, "Warning", "Use Add Button to add patterns in sequence.")
             return
 
-        file_path = "D:/images"
+        file_path = str(cfg.PATTERN_OUTPUT_DIRECTORY)
         file_name, _ = QFileDialog.getOpenFileName(self, "Select Splash Image", file_path, "BMP Files (*.bmp)")
         if file_name:
             img = QImage(file_name)
@@ -913,6 +1005,11 @@ class ConfigureDMD(QMainWindow):
             self.update_scroll_area()
 
     def clear_all(self):
+        """Clear the pattern LUTs and reset DMD status indicators.
+
+        This operation clears the in-memory LUT objects for all four DMDs and updates
+        the platform diagram to show that no DMD sequence is configured.
+        """
         self.dmd1.clear_pat_lut()
         self.dmd2.clear_pat_lut()
         self.dmd3.clear_pat_lut()
@@ -935,24 +1032,28 @@ class ConfigureDMD(QMainWindow):
         self.parent.platform_status_label.setPixmap(self.parent.current_image)
 
     def define_heart_all_sequence(self):
+        """Select the wide-field optical-stimulation preset for all DMDs."""
         for spinbox in [self.blue_pattern_dmd1, self.blue_pattern_dmd2, self.blue_pattern_dmd3, self.blue_pattern_dmd4]:
             spinbox.setValue(1)
         for spinbox in [self.red_pattern_dmd1, self.red_pattern_dmd2, self.red_pattern_dmd3, self.red_pattern_dmd4]:
             spinbox.setValue(1)
 
     def define_heart_apex_sequence(self):
+        """Select the heart-apex optical-stimulation preset for all DMDs."""
         for spinbox in [self.blue_pattern_dmd1, self.blue_pattern_dmd2, self.blue_pattern_dmd3, self.blue_pattern_dmd4]:
             spinbox.setValue(6)
         for spinbox in [self.red_pattern_dmd1, self.red_pattern_dmd2, self.red_pattern_dmd3, self.red_pattern_dmd4]:
             spinbox.setValue(1)
 
     def define_heart_base_sequence(self):
+        """Select the heart-base optical-stimulation preset for all DMDs."""
         for spinbox in [self.blue_pattern_dmd1, self.blue_pattern_dmd2, self.blue_pattern_dmd3, self.blue_pattern_dmd4]:
             spinbox.setValue(5)
         for spinbox in [self.red_pattern_dmd1, self.red_pattern_dmd2, self.red_pattern_dmd3, self.red_pattern_dmd4]:
             spinbox.setValue(1)
 
     def define_heart_dx_sequence(self):
+        """Select the right-side optical-stimulation pattern combination."""
         self.blue_pattern_dmd1.setValue(3)
         self.blue_pattern_dmd2.setValue(1)
         self.blue_pattern_dmd3.setValue(4)
@@ -961,6 +1062,7 @@ class ConfigureDMD(QMainWindow):
             spinbox.setValue(1)
 
     def define_heart_sx_sequence(self):
+        """Select the left-side optical-stimulation pattern combination."""
         self.blue_pattern_dmd1.setValue(4)
         self.blue_pattern_dmd2.setValue(2)
         self.blue_pattern_dmd3.setValue(3)
@@ -969,18 +1071,33 @@ class ConfigureDMD(QMainWindow):
             spinbox.setValue(1)
 
     def define_heart_line_sequence(self):
+        """Select a line-stimulation preset using the configured line width."""
         for spinbox in [self.blue_pattern_dmd1, self.blue_pattern_dmd2, self.blue_pattern_dmd3, self.blue_pattern_dmd4]:
             spinbox.setValue(9 + self.line_width.value())
         for spinbox in [self.red_pattern_dmd1, self.red_pattern_dmd2, self.red_pattern_dmd3, self.red_pattern_dmd4]:
             spinbox.setValue(1)
 
     def enable_preview_button(self, cam1, cam2, cam3, cam4):
+        """Initialize single-frame preview acquisition for four cameras.
+
+        Parameters
+        ----------
+        cam1, cam2, cam3, cam4 : camera
+            Camera-controller objects used by the asynchronous preview thread.
+        """
         self.enable_preview.setEnabled(True)
 
         self.acquire_single_frame_thread = AcquireSingleThread(cam1, cam2, cam3, cam4, parent=self)
         self.acquire_single_frame_thread.finished_signal.connect(self.enable_preview_buttons)
 
     def enable_preview_buttons(self, frame1, frame2, frame3, frame4):
+        """Display newly acquired preview frames and enable LUT controls.
+
+        Parameters
+        ----------
+        frame1, frame2, frame3, frame4 : object
+            Frame objects acquired from the four cameras.
+        """
         sf.show_frame_x_thread(frame1, self.preview_cam1)
         sf.show_frame_x_thread(frame2, self.preview_cam2)
         sf.show_frame_x_thread(frame3, self.preview_cam3)
@@ -1004,6 +1121,12 @@ class ConfigureDMD(QMainWindow):
         self.frame_cam4 = frame4
 
     def pause_sequence(self):
+        """Pause pattern display on the selected or all connected DMDs.
+
+        The method also restores the relevant selection controls and updates the
+        platform-status diagram. The command is blocked while the parent window marks
+        the PCIe command path as busy.
+        """
         if self.parent.avoid_overray:
             QMessageBox.warning(self, "Warning", "Please turn off the DMDs before sending this command. Risk of command overload to the PCIe-6612!")
             return
@@ -1059,6 +1182,7 @@ class ConfigureDMD(QMainWindow):
         self.start_button.setEnabled(True)
 
     def prepare_all_patterns_to_lut(self):
+        """Start sequential LUT configuration for every connected DMD."""
         if self.parent.avoid_overray:
             QMessageBox.warning(self, "Warning", "Please turn off the DMDs before sending this command. Risk of command overload to the PCIe-6612!")
             return
@@ -1071,6 +1195,10 @@ class ConfigureDMD(QMainWindow):
         self.add_all_patterns_to_lut()
 
     def remove_splash_image(self):
+        """Remove the selected splash image from the editable firmware list.
+
+        Image counters, index limits, and the preview area are updated after removal.
+        """
         index = self.select_index_spinbox.value()
         del self.m_added_splash_images[index]
 
@@ -1085,10 +1213,11 @@ class ConfigureDMD(QMainWindow):
         self.images_removed_label.setText(str(self.m_splash_image_removed))
 
     def save_firmware_updates(self):
+        """Choose an output file and start rebuilding the modified firmware."""
         self.file_name, _ = QFileDialog.getSaveFileName(
             parent=self,
             caption="Enter name of new Image to be built",
-            directory="C:/Users/Panoramic/Desktop/Pattern Files Repository",
+            directory=str(cfg.PATTERN_REPOSITORY),
             filter="*.img *.bin"
         )
         if not self.file_name:
@@ -1097,6 +1226,18 @@ class ConfigureDMD(QMainWindow):
         self.modify_firmware_thread.start()
 
     def send_command_to_dac(self, dmd):
+        """Send the selected DMD LED-current settings to the DAC controller.
+
+        Parameters
+        ----------
+        dmd : int
+            DMD identifier in the range 1--4.
+
+        Notes
+        -----
+        The GUI values are expressed in amperes. They are scaled by ``0.125`` before
+        being inserted into the command dictionary sent to the external DAC service.
+        """
         if dmd == 1:
             red_current = self.red_led_power_dmd1.value()
             blue_current = self.blue_led_power_dmd1.value()
@@ -1158,10 +1299,14 @@ class ConfigureDMD(QMainWindow):
         sf.send_command_to_board(self.command_dict)
 
     def show_patterns(self, browse):
-        """for file in os.listdir("pattern_to_show"):
-            file_path = os.path.join("pattern_to_show", file)
-            if os.path.isfile(file_path):
-                os.remove(file_path)"""
+        """Load firmware patterns into the scrollable preview area.
+
+        Parameters
+        ----------
+        browse : bool
+            When ``True``, display the firmware selected through the file browser.
+            When ``False``, display the first firmware file in ``flash_firmware``.
+        """
 
         sf.clear_layout(self.show_pattern_layout)
 
@@ -1176,6 +1321,18 @@ class ConfigureDMD(QMainWindow):
             self.show_images_thread.start()
 
     def start_sequence(self, warning=True, draw=True):
+        """Start pattern display on the selected or all connected DMDs.
+
+        Parameters
+        ----------
+        warning : bool, default=True
+            Show a summary warning for DMDs that could not be started.
+        draw : bool, default=True
+            Update the platform-status diagram when all connected DMDs are started.
+
+        The operation is rejected if no LUT is configured or if the parent window has
+        blocked additional PCIe commands.
+        """
         if self.parent.avoid_overray:
             QMessageBox.warning(self, "Warning", "Please turn off the DMDs before sending this command. Risk of command overload to the PCIe-6612!")
             return
@@ -1291,6 +1448,11 @@ class ConfigureDMD(QMainWindow):
         sf.select_channel(0)
 
     def stop_sequence(self):
+        """Stop pattern display on the selected or all connected DMDs.
+
+        The method restores the GUI controls, resets the active DMD channel, and updates
+        the platform-status diagram.
+        """
         if self.parent.avoid_overray:
             QMessageBox.warning(self, "Warning", "Please turn off the DMDs before sending this command. Risk of command overload to the PCIe-6612!")
             return
@@ -1346,6 +1508,13 @@ class ConfigureDMD(QMainWindow):
         self.start_button.setEnabled(True)
 
     def update_build(self, new_frmw_image):
+        """Write a rebuilt firmware image to disk and reset editing controls.
+
+        Parameters
+        ----------
+        new_frmw_image : bytes or bytearray
+            Complete firmware image produced by the firmware-modification worker.
+        """
         try:
             with open(self.file_name, "wb+") as out_file:
                 out_file.write(new_frmw_image)
@@ -1363,9 +1532,20 @@ class ConfigureDMD(QMainWindow):
         QMessageBox.information(self, "Success", "Build Complete.")
 
     def update_dmd_connection(self):
+        """Refresh the local list of connected DMD identifiers from the parent."""
         self.dmd_connected = self.parent.dmd_connected
 
     def update_gui(self, success):
+        """Handle completion of a pattern-LUT validation operation.
+
+        Parameters
+        ----------
+        success : bool
+            Whether LUT creation and validation completed successfully.
+
+        When configuring all DMDs, this method advances to the next connected device.
+        Otherwise, it restores the idle GUI state.
+        """
         if self.all_together:
             self.index_dmd_selected += 1
             if self.index_dmd_selected < len(self.dmd_connected):
@@ -1393,6 +1573,7 @@ class ConfigureDMD(QMainWindow):
                 return
 
     def update_image_index(self):
+        """Read the number of stored patterns and update all index selectors."""
         if len(self.dmd_connected) > 0:
             sf.select_channel(self.dmd_connected[0])
 
@@ -1410,6 +1591,11 @@ class ConfigureDMD(QMainWindow):
             sf.select_channel(0)
 
     def upload_patterns_dmd1(self):
+        """Prepare the selected firmware and begin upload to the first DMD.
+
+        A copy of the selected file is stored in ``flash_firmware`` for local reuse.
+        Uploads then proceed through the connected DMD list asynchronously.
+        """
         directory = 'flash_firmware'
         files = os.listdir(directory)
 
@@ -1429,6 +1615,13 @@ class ConfigureDMD(QMainWindow):
         self.upload_patterns_thread.start()
 
     def upload_patterns_other_dmds(self, success):
+        """Handle one firmware-upload result and continue with the next DMD.
+
+        Parameters
+        ----------
+        success : bool
+            Whether the upload to the current DMD completed successfully.
+        """
         self.upload_patterns_thread.quit()
         self.upload_patterns_thread.wait()
 
@@ -1458,9 +1651,23 @@ class ConfigureDMD(QMainWindow):
             ss.update_toolbutton_style(self.dmd1_icon_upload, 'off')
 
     def update_progress_bar_lut(self, progress):
+        """Update the shared LUT-validation progress bar.
+
+        Parameters
+        ----------
+        progress : int
+            Progress percentage emitted by a LUT-validation worker.
+        """
         self.progress_bar_lut.setValue(progress)
 
     def update_progress_bar_upload(self, progress):
+        """Update the firmware-upload progress bar for the active DMD.
+
+        Parameters
+        ----------
+        progress : int
+            Progress percentage emitted by the upload worker.
+        """
         if self.dmd_selected == 1:
             self.progress_bar_dmd1.setValue(progress)
         elif self.dmd_selected == 2:
@@ -1471,6 +1678,14 @@ class ConfigureDMD(QMainWindow):
             self.progress_bar_dmd4.setValue(progress)
 
     def update_scroll_area(self, ret=0):
+        """Refresh the firmware-pattern preview and report parsing errors.
+
+        Parameters
+        ----------
+        ret : int, default=0
+            Firmware parsing result. Zero indicates success; negative values identify
+            memory, signature, version, header, or output-file errors.
+        """
         if ret == -1:
             QMessageBox.critical(self, "Error", "Fatal Error! System Run out of memory!")
             return
@@ -1541,6 +1756,13 @@ class ConfigureDMD(QMainWindow):
         self.show_pattern_layout.addStretch()
 
     def closeEvent(self, event):
+        """Ask for confirmation before closing the DMD manager window.
+
+        Parameters
+        ----------
+        event : QCloseEvent
+            Qt close event that is accepted or ignored according to the user's choice.
+        """
         reply = QMessageBox.question(
             self,
             "Confirm Exit",
